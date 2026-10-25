@@ -512,104 +512,99 @@ label[data-testid="stWidgetLabel"] p {
     background: var(--surface-card) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 18px !important;
-    overflow: hidden !important;
+    padding: 1.5rem 1.7rem !important;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05) !important;
-    margin-bottom: 1.6rem !important;
+    margin-bottom: 1.4rem !important;
     transition: all 0.25s ease !important;
 }
 
 .zomato-restaurant-card:hover {
     border-color: var(--primary) !important;
-    transform: translateY(-3px) !important;
-    box-shadow: 0 10px 28px rgba(226, 55, 68, 0.12) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 26px rgba(226, 55, 68, 0.12) !important;
 }
 
-.card-media-wrap {
-    position: relative !important;
-    width: 100% !important;
-    height: 190px !important;
-    overflow: hidden !important;
-    background: #F0EDED !important;
-}
-
-.card-media-wrap img {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    transition: transform 0.4s ease !important;
-}
-
-.card-media-scrim {
-    position: absolute !important;
-    inset: 0 !important;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.25) 0%, transparent 40%, rgba(20, 20, 20, 0.75) 100%) !important;
-}
-
-.zomato-restaurant-card:hover .card-media-wrap img {
-    transform: scale(1.04) !important;
-}
-
-.overlay-rank-tag {
-    position: absolute !important;
-    top: 14px !important;
-    left: 14px !important;
-    background: var(--primary) !important;
-    color: #FFFFFF !important;
-    font-size: 0.76rem !important;
-    font-weight: 800 !important;
-    padding: 0.32rem 0.75rem !important;
-    border-radius: 9999px !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
-    letter-spacing: 0.6px !important;
-    text-transform: uppercase !important;
-    display: inline-flex !important;
+.card-top-header {
+    display: flex !important;
+    justify-content: space-between !important;
     align-items: center !important;
-    gap: 4px !important;
+    flex-wrap: wrap !important;
+    gap: 0.8rem !important;
+    margin-bottom: 0.5rem !important;
 }
 
-.overlay-bottom-left {
-    position: absolute !important;
-    bottom: 12px !important;
-    left: 16px !important;
-    color: #FFFFFF !important;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.6) !important;
+.card-title-cluster {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    flex-wrap: wrap !important;
 }
 
-.overlay-bottom-left .hero-card-name {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-size: 1.25rem !important;
+.match-rank-badge {
+    background: #FFF5F5 !important;
+    color: var(--primary) !important;
+    border: 1px solid var(--border-subtle) !important;
+    font-size: 0.75rem !important;
     font-weight: 800 !important;
-    margin: 0 !important;
-    color: #FFFFFF !important;
-    line-height: 1.2 !important;
+    padding: 0.28rem 0.7rem !important;
+    border-radius: 9999px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
 }
 
-.overlay-bottom-left .hero-card-meta {
-    font-size: 0.84rem !important;
-    color: #F0EDED !important;
+.restaurant-title {
+    font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif !important;
+    font-size: 1.4rem !important;
+    font-weight: 800 !important;
+    color: var(--on-surface) !important;
     margin: 0 !important;
-    font-weight: 500 !important;
+    line-height: 1.25 !important;
 }
 
-.overlay-rating-badge {
-    position: absolute !important;
-    bottom: 12px !important;
-    right: 16px !important;
+.rating-badge-pill {
     background: var(--secondary) !important;
     color: #FFFFFF !important;
     font-weight: 800 !important;
-    font-size: 0.95rem !important;
-    padding: 0.32rem 0.75rem !important;
+    font-size: 1rem !important;
+    padding: 0.35rem 0.75rem !important;
     border-radius: 8px !important;
     display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.25rem !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+    align-items: baseline !important;
+    gap: 0.2rem !important;
+    box-shadow: 0 2px 6px rgba(36, 150, 63, 0.25) !important;
 }
 
-.card-content-area {
-    padding: 1.3rem 1.6rem !important;
-    background: var(--surface-card) !important;
+.rating-sub {
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    opacity: 0.85 !important;
+}
+
+.locality-subrow {
+    font-size: 0.92rem !important;
+    color: var(--on-surface-variant) !important;
+    margin-bottom: 0.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    flex-wrap: wrap !important;
+}
+
+.meta-dot {
+    color: #C0C0C0 !important;
+}
+
+.cost-highlight {
+    font-weight: 700 !important;
+    color: var(--on-surface) !important;
+}
+
+.cuisines-row {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 0.4rem !important;
+    margin-bottom: 0.85rem !important;
 }
 
 .cuisine-badge-item {
@@ -621,8 +616,6 @@ label[data-testid="stWidgetLabel"] p {
     padding: 0.25rem 0.65rem !important;
     border-radius: 9999px !important;
     display: inline-block !important;
-    margin-right: 0.35rem !important;
-    margin-bottom: 0.35rem !important;
 }
 
 .veg-indicator {
@@ -636,7 +629,6 @@ label[data-testid="stWidgetLabel"] p {
     display: inline-flex !important;
     align-items: center !important;
     gap: 4px !important;
-    margin-right: 0.4rem !important;
 }
 
 /* AI Recommendation Insight Box (Stitch Signature) */
@@ -798,20 +790,19 @@ def get_dataset() -> pd.DataFrame:
 dataset = get_dataset()
 
 
-# ── ZOMATO TOP NAVIGATION BAR (Stitch Elevated) ──────────────────────────────
+# ── ZOMATO TOP NAVIGATION BAR (Clean & User-Centric) ─────────────────────────
 render_html(
     """
     <div class="zomato-nav-bar">
         <div class="brand-section">
             <span class="zomato-logo-text">zomato <span class="ai-logo-tag">AI</span></span>
-            <span class="nav-city-badge">📍 Delhi NCR • Bangalore • Faridabad (33,476+ Venues)</span>
+            <span class="nav-city-badge">📍 Delhi NCR • Bangalore • Faridabad (33,476+ Places)</span>
         </div>
         <div class="nav-right-cluster">
             <div class="ai-concierge-pill">
                 <span class="pulse-dot-wrap"></span>
-                <span>AI Concierge (Llama 3.3 70B Online)</span>
+                <span>AI Dining Concierge Active</span>
             </div>
-            <span class="cli-badge-pill">⚡ CLI Mode Available</span>
         </div>
     </div>
     """
@@ -824,15 +815,15 @@ render_html(
     <div class="search-console-hero">
         <div class="hero-top-row">
             <div>
-                <div class="hero-brand-tag">✨ POWERED BY GENERATIVE FOOD INTELLIGENCE</div>
+                <div class="hero-brand-tag">✨ AI-POWERED RESTAURANT DISCOVERY</div>
                 <h1 class="hero-main-title">What are you craving today?</h1>
-                <p class="hero-subtext">Let our neural LLM concierge uncover hidden bistros, hyper-specific vibes, and confirmed tables tailored dynamically to your palate.</p>
+                <p class="hero-subtext">Discover handpicked dining spots and hidden gems tailored dynamically to your taste, budget, and dining mood.</p>
             </div>
             <div class="hero-telemetry-badge">
                 <span class="telemetry-icon">✓</span>
                 <div>
-                    <div class="telemetry-label">Live Dining Matrix</div>
-                    <div class="telemetry-val">33,476+ Verified Venues</div>
+                    <div class="telemetry-label">Curated Selection</div>
+                    <div class="telemetry-val">33,476+ Verified Places</div>
                 </div>
             </div>
         </div>
@@ -986,14 +977,13 @@ if submitted:
         if response.curator_summary:
             relaxation_html = ""
             if response.relaxation_applied:
-                relaxation_html = f'<div class="strategy-relaxation-pill">🎛️ <b>Adaptive Relaxation:</b> {response.relaxation_applied}</div>'
+                relaxation_html = f'<div class="strategy-relaxation-pill">💡 <b>Helpful Note:</b> {response.relaxation_applied}</div>'
 
             render_html(
                 f"""
                 <div class="ai-strategy-card">
                     <div class="strategy-header">
-                        <div class="strategy-title">💡 AI Curator Analysis & Strategy</div>
-                        <div class="strategy-badge">⚡ ~400ms • Llama 3.3 70B • Candidates Evaluated</div>
+                        <div class="strategy-title">💡 AI Dining Curator Insights</div>
                     </div>
                     <p class="strategy-body">{response.curator_summary}</p>
                     {relaxation_html}
@@ -1001,11 +991,10 @@ if submitted:
                 """
             )
 
-        # Render Authentic Zomato Cards (Stitch Luxury Layout)
+        # Render Clean, Authentic Restaurant Cards (Image-Free, User-Friendly)
         for rank, r in enumerate(response.recommendations, start=1):
             cuisines_list = r.cuisine if isinstance(r.cuisine, list) else [str(r.cuisine)]
-            card_img = get_restaurant_card_image(cuisines_list, r.restaurant_name)
-            cuisines_html = "".join([f'<span class="cuisine-badge-item">{c.title()}</span>' for c in cuisines_list[:4]])
+            cuisines_html = "".join([f'<span class="cuisine-badge-item">{c.title()}</span>' for c in cuisines_list[:5]])
 
             veg_html = '<span class="veg-indicator">🌱 Pure Veg</span>' if is_pure_veg or any("veg" in c.lower() for c in cuisines_list) else ''
             loc_str = r.locality.title() if r.locality else city_clean_name
@@ -1014,28 +1003,30 @@ if submitted:
             # Flat HTML with zero leading indentation to guarantee no markdown code block triggers
             card_html = (
                 f'<div class="zomato-restaurant-card">'
-                f'<div class="card-media-wrap">'
-                f'<img src="{card_img}" alt="{r.restaurant_name}" />'
-                f'<div class="card-media-scrim"></div>'
-                f'<span class="overlay-rank-tag">Top AI Match #{rank} • Verified</span>'
-                f'<div class="overlay-bottom-left">'
-                f'<h4 class="hero-card-name">{r.restaurant_name}</h4>'
-                f'<p class="hero-card-meta">📍 {loc_str} • {r.estimated_cost}</p>'
+                f'<div class="card-top-header">'
+                f'<div class="card-title-cluster">'
+                f'<span class="match-rank-badge">#{rank} Top Match</span>'
+                f'<h4 class="restaurant-title">{r.restaurant_name}</h4>'
                 f'</div>'
-                f'<div class="overlay-rating-badge">★ {r.rating:.1f}</div>'
+                f'<div class="rating-badge-pill">'
+                f'<span>★ {r.rating:.1f}</span>'
+                f'<span class="rating-sub">/ 5.0</span>'
                 f'</div>'
-                f'<div class="card-content-area">'
-                f'<div style="margin-bottom:0.75rem;">{veg_html}{cuisines_html}</div>'
+                f'</div>'
+                f'<div class="locality-subrow">'
+                f'<span>📍 {loc_str}, {city_clean_name}</span>'
+                f'<span class="meta-dot">•</span>'
+                f'<span class="cost-highlight">💰 {r.estimated_cost}</span>'
+                f'</div>'
+                f'<div class="cuisines-row">{veg_html}{cuisines_html}</div>'
                 f'<div class="ai-insight-box">'
-                f'<div class="ai-insight-title">✨ Why This Fits Your Palate</div>'
+                f'<div class="ai-insight-title">✨ Why You\'ll Love This Place</div>'
                 f'<div class="ai-insight-text">{r.ai_explanation}</div>'
                 f'</div>'
                 f'<div class="card-footer-action-row">'
                 f'<span class="card-address-text">📌 {addr_str}</span>'
                 f'<div class="card-action-btn-group">'
-                f'<span class="card-btn-outline">View Menu</span>'
-                f'<span class="card-btn-outline" style="background:#FFF5F5; color:#E23744; border-color:#FCD4D4;">Directions</span>'
-                f'</div>'
+                f'<span class="card-btn-outline">Directions & Map</span>'
                 f'</div>'
                 f'</div>'
                 f'</div>'
