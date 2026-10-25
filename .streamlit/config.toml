@@ -7,5 +7,5 @@ textColor = "#1C1C1C"
 font = "sans serif"
 
 [server]
-headless = true
-enableCORS = false
+headless = false
+
