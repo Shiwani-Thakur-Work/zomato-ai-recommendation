@@ -33,7 +33,6 @@ import streamlit as st
 
 from src.config import DEFAULT_MAX_RESULTS, DEFAULT_MIN_RATING, GROQ_MODEL, MAX_CANDIDATES_FOR_LLM
 from src.data.preprocessor import build_processed_dataset
-from src.engine.filter import is_pure_veg_restaurant
 from src.engine.recommend import recommend
 from src.engine.schemas import BudgetTier, RecommendationResponse, UserPreferences
 
@@ -1067,11 +1066,7 @@ if submitted:
             cuisines_list = r.cuisine if isinstance(r.cuisine, list) else [str(r.cuisine)]
             cuisines_html = "".join([f'<span class="cuisine-badge-item">{c.title()}</span>' for c in cuisines_list[:5]])
 
-            is_veg_card = getattr(r, "is_pure_veg", False) or is_pure_veg_restaurant({
-                "name": r.restaurant_name,
-                "cuisines": cuisines_list,
-                "highlights": [],
-            })
+            is_veg_card = bool(getattr(r, "is_pure_veg", False))
             veg_html = '<span class="veg-indicator">🌱 Pure Veg</span>' if is_veg_card else ''
             loc_str = r.locality.title() if r.locality else city_clean_name
             addr_str = r.address if r.address else f"{loc_str}, {city_clean_name}"
