@@ -1,0 +1,23 @@
+[project]
+name = "milestone-1-zomato-recommendation"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "datasets>=5.1.0",
+    "groq>=1.7.0",
+    "pandas>=3.1.0",
+    "pyarrow>=26.0.0",
+    "pydantic>=2.5.0",
+    "pytest>=9.1.1",
+    "pytest-mock>=3.17.0",
+    "python-dotenv>=1.2.4",
+    "rapidfuzz>=3.14.6",
+    "streamlit>=1.66.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests as integration tests (requires network/data)",
+]

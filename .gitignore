@@ -1,0 +1,42 @@
+# ── Virtual Environment & uv ──────────────────
+.venv/
+.uv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Environment Variables & Secrets ───────────
+.env
+.env.*
+*.env
+.streamlit/secrets.toml
+
+# ── Local Documentation (Untracked) ───────────
+docs/
+
+# ── Data ──────────────────────────────────────
+data/raw/
+data/processed/*
+!data/processed/zomato_cleaned.parquet
+
+# ── Python Build Artifacts ────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ── Testing & Coverage ────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── IDE / OS ──────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Jupyter ───────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
