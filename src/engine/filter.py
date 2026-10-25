@@ -55,6 +55,105 @@ ADJACENT_BUDGET_TIERS: dict[str, set[str]] = {
     "any": {"low", "medium", "high"},
 }
 
+# Meat, poultry, seafood, and non-veg identifying patterns
+NON_VEG_WORDS: set[str] = {
+    "chicken", "mutton", "fish", "meat", "prawn", "prawns", "egg", "eggs",
+    "kebab", "kebabs", "seafood", "beef", "pork", "non-veg", "non veg", "nonveg",
+    "butter chicken", "tandoori chicken", "biryani", "shawarma", "steak", "steaks",
+    "bbq", "barbeque", "barbecue", "duck", "lamb", "bacon", "ham", "pepperoni",
+    "kfc", "burger king", "mcdonald", "al bake", "tandoori hut", "sushi", "crab", "lobster"
+}
+
+NON_VEG_CUISINES: set[str] = {
+    "biryani", "mughlai", "seafood", "bbq", "barbeque", "steak", "meat", "kebab", "kebabs", "sushi", "fish"
+}
+
+PURE_VEG_BRANDS: set[str] = {
+    "haldiram", "bikanervala", "om sweets", "sagar ratna", "saravana", "saravanaa",
+    "aggarwal", "agarwal", "bikaner", "vaishno", "shakahari", "shree rathnam",
+    "govinda", "isckon", "iskcon", "udupi", "kamath", "swagath", "giani", "naturals ice cream",
+    "jain", "a2b", "adyar ananda bhavan", "mithai", "sweets & snacks", "shree", "shri",
+    "anand sweets", "brahmin", "kailash parbat", "vaishnav", "bhavan", "ashoka sweets",
+    "subway pure veg", "shree krishna"
+}
+
+VEG_ONLY_CUISINES: set[str] = {
+    "sweets", "mithai", "south indian", "bakery", "desserts", "ice cream", "beverages",
+    "chaat", "street food", "juices", "ice cream cakes"
+}
+
+
+def is_pure_veg_restaurant(row: pd.Series | dict) -> bool:
+    """Accurately identify if a restaurant is strictly 100% pure vegetarian."""
+    if isinstance(row, pd.Series):
+        name = str(row.get("name", "")).lower()
+        c_raw = row.get("cuisines", [])
+        hl_raw = row.get("highlights", [])
+    else:
+        name = str(row.get("name", "")).lower()
+        c_raw = row.get("cuisines", [])
+        hl_raw = row.get("highlights", [])
+
+    # 1. Non-veg keyword detection in name
+    for nw in NON_VEG_WORDS:
+        if nw in name and not ("pure veg" in name or "veg biryani" in name):
+            return False
+
+    # 2. Check cuisines for meat/seafood
+    if isinstance(c_raw, (list, tuple)):
+        c_list = [str(c).lower().strip() for c in c_raw]
+    elif hasattr(c_raw, "__iter__") and not isinstance(c_raw, str):
+        c_list = [str(c).lower().strip() for c in c_raw]
+    else:
+        c_list = [str(c_raw).lower().strip()] if c_raw else []
+
+    for c in c_list:
+        for nc in NON_VEG_CUISINES:
+            if nc in c:
+                return False
+
+    # 3. Check highlights for non-veg dishes
+    if isinstance(hl_raw, (list, tuple)):
+        hl_list = [str(h).lower().strip() for h in hl_raw]
+    elif hasattr(hl_raw, "__iter__") and not isinstance(hl_raw, str):
+        hl_list = [str(h).lower().strip() for h in hl_raw]
+    else:
+        hl_list = [str(hl_raw).lower().strip()] if hl_raw else []
+
+    for h in hl_list:
+        for nw in NON_VEG_WORDS:
+            if nw in h:
+                return False
+
+    # 4. Positive indicators: explicit pure veg name, trusted pure veg brand, or explicit highlights
+    if any(term in name for term in ["pure veg", "pure vegetarian", "vegetarian", "shakahari", "vaishno", "jain"]):
+        return True
+    if any(b in name for b in PURE_VEG_BRANDS):
+        return True
+    if any(term in h for h in hl_list for term in ["pure veg", "pure vegetarian", "vegetarian", "jain friendly"]):
+        return True
+
+    # 5. Vegetarian-only cuisine categories (sweets, south indian, bakery, desserts, chaat, etc.)
+    if c_list and all(any(vc in c for vc in VEG_ONLY_CUISINES) for c in c_list):
+        return True
+
+    return False
+
+
+def _extract_craving_keywords(text: str) -> list[str]:
+    """Extract culinary and dish keywords from free-form user craving."""
+    if not text:
+        return []
+    stop_words = {
+        "and", "with", "for", "the", "in", "a", "an", "of", "to", "at", "on", "family",
+        "friends", "couple", "date", "night", "dinner", "lunch", "breakfast", "good",
+        "best", "top", "great", "nice", "places", "place", "restaurant", "food",
+        "spicy", "hot", "mild", "sweet", "craving", "cravings", "pure", "veg", "vegetarian",
+        "some", "want", "like", "order", "table", "book", "find", "near", "me"
+    }
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    return [w for w in words if w not in stop_words]
+
 
 def _normalize_text(text: Any) -> str:
     """Strip accents, punctuation, and extraneous whitespace; lowercase."""
@@ -153,19 +252,31 @@ def _calculate_cuisine_match_ratio(
 def _score_candidate(
     row: pd.Series | dict,
     query_cuisines: list[str],
+    craving_keywords: list[str] | None = None,
 ) -> float:
     """Calculate the composite score for candidate ranking:
 
-    Score = (Rating * 0.5) + (log10(Votes + 1) * 0.3) + (CuisineMatchRatio * 0.2)
+    Score = (Rating * 0.5) + (log10(Votes + 1) * 0.3) + (CuisineMatchRatio * 0.2) + DishMatchBonus
     """
     rating = float(row.get("rating", 0.0))
     votes = int(row.get("votes", 0))
     cuisines = row.get("cuisines", [])
+    highlights = row.get("highlights", [])
+    name = str(row.get("name", "")).lower()
 
     cuisine_ratio = _calculate_cuisine_match_ratio(cuisines, query_cuisines)
     votes_component = math.log10(max(votes, 0) + 1.0)
 
-    score = (rating * 0.5) + (votes_component * 0.3) + (cuisine_ratio * 0.2)
+    # Craving / dish keyword alignment bonus
+    dish_bonus = 0.0
+    if craving_keywords:
+        hl_text = " ".join(str(h).lower() for h in (highlights if hasattr(highlights, "__iter__") else []))
+        c_text = " ".join(str(c).lower() for c in (cuisines if hasattr(cuisines, "__iter__") else []))
+        combined = f"{name} {c_text} {hl_text}"
+        matches = sum(1 for kw in craving_keywords if kw in combined)
+        dish_bonus = min(matches * 0.35, 1.0)
+
+    score = (rating * 0.5) + (votes_component * 0.3) + (cuisine_ratio * 0.2) + dish_bonus
     return round(score, 4)
 
 
@@ -174,6 +285,7 @@ def _apply_hard_filter(
     location_query: str,
     min_rating: float,
     allowed_budgets: set[str],
+    pure_veg: bool = False,
     city_only_fallback: bool = False,
 ) -> pd.DataFrame:
     """Execute a single hard filter pass against the dataset."""
@@ -186,13 +298,27 @@ def _apply_hard_filter(
     if "any" not in allowed_budgets:
         filtered = filtered[filtered["budget_tier"].isin(allowed_budgets)]
 
-    # 3. Location filter
+    # 3. Pure Veg hard filter (Strictly enforced, never relaxed)
+    if pure_veg:
+        filtered = filtered[filtered.apply(is_pure_veg_restaurant, axis=1)]
+
+    # 4. Location filter
+    # Handle compound location queries e.g. "Sector 16, Faridabad"
+    has_comma = "," in location_query
+    if has_comma:
+        parts = [p.strip() for p in location_query.split(",") if p.strip()]
+        target_loc = parts[0] if parts else ""
+        target_city = parts[1] if len(parts) > 1 else ""
+    else:
+        target_loc = ""
+        target_city = location_query
+
     if city_only_fallback:
-        q_norm = _normalize_text(location_query)
-        # Check if query_location corresponds to a known locality in the dataset
+        search_city = target_city if target_city else location_query
+        # Check if query corresponds to a known locality in the dataset
         if "locality" in df.columns:
             matched_cities = df[
-                df["locality"].apply(lambda loc: _city_matches(location_query, "", str(loc), None))
+                df["locality"].apply(lambda loc: _city_matches(search_city, "", str(loc), None))
             ]["city"].unique()
         else:
             matched_cities = []
@@ -201,20 +327,34 @@ def _apply_hard_filter(
             filtered = filtered[filtered["city"].isin(matched_cities)]
         else:
             filtered = filtered[
-                filtered["city"].apply(lambda c: _city_matches(location_query, c, None, None))
+                filtered["city"].apply(lambda c: _city_matches(search_city, c, None, None))
             ]
     else:
         # Check city, locality, and address
         has_locality = "locality" in filtered.columns
         has_address = "address" in filtered.columns
 
-        def _row_location_matches(r: pd.Series) -> bool:
-            loc = r["locality"] if has_locality else None
-            addr = r["address"] if has_address else None
-            return _city_matches(location_query, r["city"], loc, addr)
+        if has_comma and target_city and target_loc:
+            def _compound_location_matches(r: pd.Series) -> bool:
+                if not _city_matches(target_city, r["city"], None, None):
+                    return False
+                loc = r["locality"] if has_locality else None
+                addr = r["address"] if has_address else None
+                return _city_matches(target_loc, r["city"], loc, addr)
 
-        mask = filtered.apply(_row_location_matches, axis=1)
-        filtered = filtered[mask]
+            mask = filtered.apply(_compound_location_matches, axis=1)
+            if mask.sum() > 0:
+                filtered = filtered[mask]
+            else:
+                filtered = filtered[filtered["city"].apply(lambda c: _city_matches(target_city, c, None, None))]
+        else:
+            def _row_location_matches(r: pd.Series) -> bool:
+                loc = r["locality"] if has_locality else None
+                addr = r["address"] if has_address else None
+                return _city_matches(location_query, r["city"], loc, addr)
+
+            mask = filtered.apply(_row_location_matches, axis=1)
+            filtered = filtered[mask]
 
     return filtered
 
@@ -240,9 +380,25 @@ def get_candidates_with_metadata(
         else {prefs.budget.value}
     )
     location_query = prefs.location
-    query_cuisines = prefs.cuisines
+    query_cuisines = list(prefs.cuisines)
     city_only_fallback = False
     relaxation_applied: list[str] = []
+    pure_veg = getattr(prefs, "pure_veg", False)
+
+    # Infer cuisines from craving/notes if cuisines not explicitly chosen
+    if not query_cuisines and prefs.additional_notes:
+        note_lower = prefs.additional_notes.lower()
+        known_cuisines = [
+            "north indian", "south indian", "chinese", "italian", "continental",
+            "mexican", "thai", "asian", "fast food", "street food", "chaat",
+            "sweets", "mithai", "bakery", "desserts", "ice cream", "cafe",
+            "beverages", "biryani", "mughlai", "pizza", "burger"
+        ]
+        for kc in known_cuisines:
+            if kc in note_lower and kc not in query_cuisines:
+                query_cuisines.append(kc)
+
+    craving_keywords = _extract_craving_keywords(prefs.additional_notes)
 
     # Initial hard filter pass
     candidates = _apply_hard_filter(
@@ -250,6 +406,7 @@ def get_candidates_with_metadata(
         location_query=location_query,
         min_rating=current_min_rating,
         allowed_budgets=allowed_budgets,
+        pure_veg=pure_veg,
         city_only_fallback=city_only_fallback,
     )
     best_candidates = candidates
@@ -265,6 +422,7 @@ def get_candidates_with_metadata(
             location_query=location_query,
             min_rating=new_rating,
             allowed_budgets=allowed_budgets,
+            pure_veg=pure_veg,
             city_only_fallback=city_only_fallback,
         )
         if len(step_candidates) > len(best_candidates):
@@ -281,6 +439,7 @@ def get_candidates_with_metadata(
                 location_query=location_query,
                 min_rating=current_min_rating,
                 allowed_budgets=expanded,
+                pure_veg=pure_veg,
                 city_only_fallback=city_only_fallback,
             )
             if len(step_candidates) > len(best_candidates):
@@ -295,6 +454,7 @@ def get_candidates_with_metadata(
             location_query=location_query,
             min_rating=current_min_rating,
             allowed_budgets=allowed_budgets,
+            pure_veg=pure_veg,
             city_only_fallback=True,
         )
         if len(step_candidates) > len(best_candidates):
@@ -309,6 +469,7 @@ def get_candidates_with_metadata(
             location_query=location_query,
             min_rating=0.0,
             allowed_budgets={"low", "medium", "high"},
+            pure_veg=pure_veg,
             city_only_fallback=True,
         )
         if len(step_candidates) > len(best_candidates):
@@ -322,7 +483,7 @@ def get_candidates_with_metadata(
 
     # Score and rank candidates
     scores = [
-        _score_candidate(row, query_cuisines)
+        _score_candidate(row, query_cuisines, craving_keywords)
         for _, row in candidates.iterrows()
     ]
     candidates = candidates.copy()
@@ -364,6 +525,7 @@ def get_candidates_with_metadata(
             "rating": float(row["rating"]),
             "votes": int(row["votes"]),
             "highlights": highlights_list,
+            "is_pure_veg": is_pure_veg_restaurant(row),
             "composite_score": float(row["composite_score"]),
         }
         result.append(item)

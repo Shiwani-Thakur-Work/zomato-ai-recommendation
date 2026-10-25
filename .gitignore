@@ -40,3 +40,6 @@ Thumbs.db
 # ── Jupyter ───────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
+
+# ── Local Design References ───────────────────
+stitch_zomato_ai_dining_concierge/

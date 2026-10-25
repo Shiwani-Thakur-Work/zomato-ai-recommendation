@@ -68,6 +68,12 @@ def parse_args() -> argparse.Namespace:
         help="Vibe, occasion, or notes (e.g. 'romantic rooftop', 'quick breakfast')",
     )
     parser.add_argument(
+        "-v", "--pure-veg",
+        action="store_true",
+        default=False,
+        help="Strictly filter for 100 percent pure vegetarian restaurants",
+    )
+    parser.add_argument(
         "-k", "--max-results",
         type=int,
         default=5,
@@ -84,6 +90,10 @@ def interactive_prompt() -> UserPreferences:
     # Location
     loc_input = input("📍 Enter City or Locality [Default: Faridabad]: ").strip()
     location = loc_input if loc_input else "Faridabad"
+
+    # Pure Veg
+    v_input = input("🌱 Pure Vegetarian Only? (y/n) [Default: n]: ").strip().lower()
+    pure_veg = v_input in ["y", "yes", "true", "1"]
 
     # Cuisine
     c_input = input("🍲 Desired Cuisine(s) (optional, e.g. North Indian, Cafe, Biryani): ").strip()
@@ -109,6 +119,7 @@ def interactive_prompt() -> UserPreferences:
         budget=budget,
         min_rating=min_rating,
         additional_notes=notes,
+        pure_veg=pure_veg,
         max_results=5,
     )
 
@@ -134,8 +145,9 @@ def print_results(response) -> None:
     for rec in response.recommendations:
         cuisines_str = ", ".join(rec.cuisine) if rec.cuisine else "Various"
         locality_str = rec.locality.title() if rec.locality else "Neighborhood"
+        veg_str = "  🌱 Pure Veg" if getattr(rec, "is_pure_veg", False) else ""
 
-        print(f"\n[{rec.match_rank}]  {rec.restaurant_name.upper()}")
+        print(f"\n[{rec.match_rank}]  {rec.restaurant_name.upper()}{veg_str}")
         print(f"     ⭐ Rating: {rec.rating:.1f}  |  💰 Cost: {rec.estimated_cost}  |  📍 {locality_str}")
         print(f"     🍲 Cuisines: {cuisines_str}")
         print(f"     ✨ AI Match Reason: {rec.ai_explanation}")
@@ -159,10 +171,11 @@ def main() -> None:
             budget=BudgetTier(args.budget),
             min_rating=args.rating,
             additional_notes=args.notes,
+            pure_veg=args.pure_veg,
             max_results=args.max_results,
         )
 
-    print(f"\nSearching 33,476+ venues for '{prefs.location}'...")
+    print(f"\nSearching 33,476+ venues for '{prefs.location}' (Pure Veg: {'ON' if prefs.pure_veg else 'OFF'})...")
     response = recommend(prefs)
     print_results(response)
 

@@ -4,6 +4,7 @@
 from src.engine.filter import (
     get_candidates,
     get_candidates_with_metadata,
+    is_pure_veg_restaurant,
 )
 from src.engine.llm_client import (
     build_user_prompt,
@@ -28,6 +29,7 @@ __all__ = [
     "RecommendationResponse",
     "get_candidates",
     "get_candidates_with_metadata",
+    "is_pure_veg_restaurant",
     "recommend",
     "build_user_prompt",
     "get_recommendations_from_llm",

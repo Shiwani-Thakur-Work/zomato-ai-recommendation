@@ -79,6 +79,7 @@ def build_user_prompt(prefs: UserPreferences, candidates: List[dict]) -> str:
     candidates_json = json.dumps(condensed_candidates, ensure_ascii=False, indent=2)
     cuisine_str = ", ".join(prefs.cuisines) if prefs.cuisines else "Any / Diverse"
     notes_str = prefs.additional_notes.strip() if prefs.additional_notes else "None specified"
+    veg_requirement = "\n- Dietary Requirement: STRICTLY 100% PURE VEGETARIAN ONLY (Never recommend meat, chicken, or non-veg dishes)" if prefs.pure_veg else ""
 
     return f"""CANDIDATE RESTAURANTS (Choose from ONLY these {len(condensed_candidates)} venues):
 {candidates_json}
@@ -88,7 +89,7 @@ USER REQUIREMENTS:
 - Budget Tier: {prefs.budget.value}
 - Cuisines Desired: {cuisine_str}
 - Minimum Acceptable Rating: {prefs.min_rating}
-- Special Notes / Desired Vibe: "{notes_str}"
+- Special Notes / Desired Vibe: "{notes_str}"{veg_requirement}
 - Desired Number of Recommendations: {prefs.max_results}
 
 INSTRUCTIONS:
@@ -169,12 +170,13 @@ def get_recommendations_from_llm(
     for item in recs:
         r_name = str(item.get("restaurant_name", "")).strip()
         if r_name.lower() in valid_names:
-            # Enrich locality/address from candidate pool if omitted by LLM
+            # Enrich locality/address/is_pure_veg from candidate pool if omitted by LLM
             cand = cand_by_name[r_name.lower()]
             if not item.get("locality") and cand.get("locality"):
                 item["locality"] = cand.get("locality")
             if not item.get("address") and cand.get("address"):
                 item["address"] = cand.get("address")
+            item["is_pure_veg"] = cand.get("is_pure_veg", False)
             grounded_recs.append(item)
         else:
             logger.warning("Dropped hallucinated restaurant from LLM response: '%s'", r_name)
@@ -225,6 +227,7 @@ def heuristic_fallback(
             ai_explanation=justification,
             locality=c.get("locality"),
             address=c.get("address"),
+            is_pure_veg=bool(c.get("is_pure_veg", False)),
         )
         recommendations.append(rec)
 

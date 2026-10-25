@@ -590,4 +590,117 @@ def test_e2e_recommend_call():
     assert all(r.ai_explanation for r in result.recommendations)
 
 
+class TestPureVegFiltering:
+    """Tests verifying strict pure vegetarian classification and candidate filtering."""
+
+    def test_pure_veg_schema_flag(self):
+        prefs_veg = UserPreferences(location="Faridabad", pure_veg=True)
+        assert prefs_veg.pure_veg is True
+        prefs_default = UserPreferences(location="Faridabad")
+        assert prefs_default.pure_veg is False
+
+    def test_is_pure_veg_classifier(self):
+        from src.engine.filter import is_pure_veg_restaurant
+
+        # Pure veg examples
+        assert is_pure_veg_restaurant({"name": "Om Sweets & Snacks", "cuisines": ["sweets", "north indian"], "highlights": []}) is True
+        assert is_pure_veg_restaurant({"name": "Sagar Ratna", "cuisines": ["south indian", "north indian"], "highlights": []}) is True
+        assert is_pure_veg_restaurant({"name": "Haldiram's", "cuisines": ["street food", "sweets"], "highlights": []}) is True
+        assert is_pure_veg_restaurant({"name": "Bikanervala", "cuisines": ["sweets", "fast food"], "highlights": ["pure veg"]}) is True
+        assert is_pure_veg_restaurant({"name": "Giani's", "cuisines": ["ice cream", "desserts"], "highlights": []}) is True
+
+        # Non-veg examples
+        assert is_pure_veg_restaurant({"name": "Bikkgane Biryani", "cuisines": ["biryani", "mughlai"], "highlights": []}) is False
+        assert is_pure_veg_restaurant({"name": "Burger King", "cuisines": ["american", "fast food"], "highlights": ["chicken burger"]}) is False
+        assert is_pure_veg_restaurant({"name": "KFC", "cuisines": ["american", "snacks"], "highlights": []}) is False
+        assert is_pure_veg_restaurant({"name": "Mr Singh's Tandoori Hut", "cuisines": ["north indian", "chinese"], "highlights": []}) is False
+        assert is_pure_veg_restaurant({"name": "Al Bake", "cuisines": ["north indian", "mughlai"], "highlights": ["chicken shawarma"]}) is False
+        assert is_pure_veg_restaurant({"name": "Fisherman's Wharf", "cuisines": ["seafood", "goan"], "highlights": ["fish curry"]}) is False
+
+    def test_candidate_retrieval_pure_veg_enforcement(self):
+        from src.engine.filter import get_candidates_with_metadata
+        from src.engine.schemas import BudgetTier, UserPreferences
+
+        test_data = pd.DataFrame([
+            {
+                "name": "Bikkgane Biryani",
+                "city": "faridabad",
+                "locality": "sector 16",
+                "address": "sector 16",
+                "rating": 4.5,
+                "votes": 1200,
+                "cost_for_two": 350,
+                "budget_tier": "low",
+                "cuisines": ["biryani", "mughlai"],
+                "highlights": ["chicken biryani"],
+            },
+            {
+                "name": "Burger King",
+                "city": "faridabad",
+                "locality": "sector 16",
+                "address": "sector 16",
+                "rating": 4.2,
+                "votes": 1500,
+                "cost_for_two": 350,
+                "budget_tier": "low",
+                "cuisines": ["american"],
+                "highlights": ["crispy chicken"],
+            },
+            {
+                "name": "Om Sweets & Snacks",
+                "city": "faridabad",
+                "locality": "sector 16",
+                "address": "sector 16",
+                "rating": 4.3,
+                "votes": 1100,
+                "cost_for_two": 400,
+                "budget_tier": "low",
+                "cuisines": ["sweets", "north indian"],
+                "highlights": ["chole bhature", "gulab jamun"],
+            },
+            {
+                "name": "Sagar Ratna",
+                "city": "faridabad",
+                "locality": "sector 16",
+                "address": "sector 16",
+                "rating": 4.4,
+                "votes": 800,
+                "cost_for_two": 400,
+                "budget_tier": "low",
+                "cuisines": ["south indian"],
+                "highlights": ["masala dosa", "filter coffee"],
+            },
+        ])
+
+        # When Pure Veg is True: only Om Sweets & Sagar Ratna must appear
+        prefs_veg = UserPreferences(
+            location="faridabad",
+            budget=BudgetTier.LOW,
+            min_rating=3.5,
+            pure_veg=True,
+            max_results=5,
+        )
+        cands_veg, _ = get_candidates_with_metadata(test_data, prefs_veg)
+        cand_names = [c["name"] for c in cands_veg]
+        assert "Om Sweets & Snacks" in cand_names
+        assert "Sagar Ratna" in cand_names
+        assert "Bikkgane Biryani" not in cand_names
+        assert "Burger King" not in cand_names
+        assert all(c["is_pure_veg"] is True for c in cands_veg)
+
+        # When Pure Veg is False: non-veg options like Bikkgane Biryani are eligible
+        prefs_nonveg = UserPreferences(
+            location="faridabad",
+            budget=BudgetTier.LOW,
+            min_rating=3.5,
+            pure_veg=False,
+            max_results=5,
+        )
+        cands_nonveg, _ = get_candidates_with_metadata(test_data, prefs_nonveg)
+        nonveg_names = [c["name"] for c in cands_nonveg]
+        assert "Bikkgane Biryani" in nonveg_names
+        assert "Burger King" in nonveg_names
+
+
+
 

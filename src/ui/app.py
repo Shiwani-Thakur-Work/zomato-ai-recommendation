@@ -33,6 +33,7 @@ import streamlit as st
 
 from src.config import DEFAULT_MAX_RESULTS, DEFAULT_MIN_RATING, GROQ_MODEL, MAX_CANDIDATES_FOR_LLM
 from src.data.preprocessor import build_processed_dataset
+from src.engine.filter import is_pure_veg_restaurant
 from src.engine.recommend import recommend
 from src.engine.schemas import BudgetTier, RecommendationResponse, UserPreferences
 
@@ -884,13 +885,13 @@ with st.form("main_search_form"):
         is_pure_veg = st.checkbox(
             "🌱 Pure Veg Only",
             value=True,
-            help="Strictly filter for pure vegetarian restaurants and family dining",
+            help="Strictly filter for 100% pure vegetarian restaurants and dining",
         )
 
     with col_f2:
         budget_selection = st.selectbox(
             "💰 Budget for Two",
-            options=["Low (< ₹400)", "Mid (₹400 – ₹1,000)", "High (> ₹1,000)"],
+            options=["Any Budget (All Tiers)", "Low (< ₹400)", "Mid (₹400 – ₹1,000)", "High (> ₹1,000)"],
             index=0,
         )
 
@@ -909,6 +910,46 @@ with st.form("main_search_form"):
             "🔢 Max Results",
             options=[3, 5, 8, 10],
             index=1,
+        )
+
+    # Row 3: Cuisine Filters & Quick Craving Presets
+    col_c1, col_c2 = st.columns([1.5, 1.5])
+    with col_c1:
+        selected_cuisines = st.multiselect(
+            "🍽️ Filter Cuisines (Optional)",
+            options=[
+                "North Indian",
+                "South Indian",
+                "Chinese",
+                "Street Food & Chaat",
+                "Sweets & Mithai",
+                "Italian & Pizzas",
+                "Fast Food & Burgers",
+                "Bakery & Desserts",
+                "Cafe & Beverages",
+                "Mughlai & Biryani",
+                "Continental",
+                "Pan-Asian & Thai",
+            ],
+            default=[],
+            help="Choose specific cuisines or leave empty to match across all cuisines",
+        )
+    with col_c2:
+        quick_craving_preset = st.selectbox(
+            "⚡ Quick Craving Shortcut (Optional)",
+            options=[
+                "Custom Craving (Use text above)",
+                "🥗 Pure Veg Thali & North Indian",
+                "🍲 Delhi Chole Bhature & Chaat",
+                "☕ Cozy Cafe, Coffee & Bakery",
+                "🍨 Heritage Mithai, Sweets & Kulfi",
+                "🍛 Creamy Dal Makhani & Garlic Naan",
+                "🥟 Crisp Street Chaat & Snacks",
+                "🍕 Woodfired Pizza & Pasta",
+                "🍔 Gourmet Burgers & Shakes",
+            ],
+            index=0,
+            help="Pick a popular curated craving to instantly enrich your search",
         )
 
     # Prominent Submit Button (Stitch Elevated)
@@ -933,18 +974,46 @@ render_html(
 # ── EXECUTION & RECOMMENDATION RESULTS ────────────────────────────────────────
 
 budget_tier_map = {
+    "Any Budget (All Tiers)": BudgetTier.ANY,
     "Low (< ₹400)": BudgetTier.LOW,
     "Mid (₹400 – ₹1,000)": BudgetTier.MEDIUM,
     "High (> ₹1,000)": BudgetTier.HIGH,
 }
-target_budget = budget_tier_map[budget_selection]
+target_budget = budget_tier_map.get(budget_selection, BudgetTier.ANY)
 
 # Resolve effective target location for engine
 city_clean_name = city_selected_label.split(" (")[0]
-effective_location = locality_input.strip() if locality_input.strip() else (resolved_city if resolved_city else "Delhi NCR")
+loc_clean = locality_input.strip()
+if loc_clean and resolved_city:
+    effective_location = f"{loc_clean}, {resolved_city}"
+elif loc_clean:
+    effective_location = loc_clean
+elif resolved_city:
+    effective_location = resolved_city
+else:
+    effective_location = "Delhi NCR"
 
-# Pure veg query injection if toggle is enabled
+cuisine_map = {
+    "North Indian": "north indian",
+    "South Indian": "south indian",
+    "Chinese": "chinese",
+    "Street Food & Chaat": "street food",
+    "Sweets & Mithai": "sweets",
+    "Italian & Pizzas": "italian",
+    "Fast Food & Burgers": "fast food",
+    "Bakery & Desserts": "bakery",
+    "Cafe & Beverages": "cafe",
+    "Mughlai & Biryani": "biryani",
+    "Continental": "continental",
+    "Pan-Asian & Thai": "asian",
+}
+canonical_cuisines = [cuisine_map.get(c, c.lower()) for c in selected_cuisines]
+
 effective_query = craving_query.strip()
+if quick_craving_preset != "Custom Craving (Use text above)":
+    preset_clean = quick_craving_preset.split(" ", 1)[-1]
+    effective_query = f"{effective_query} {preset_clean}".strip() if effective_query else preset_clean
+
 if is_pure_veg and "veg" not in effective_query.lower():
     effective_query = f"pure vegetarian {effective_query}".strip()
 
@@ -952,8 +1021,10 @@ if submitted:
     prefs = UserPreferences(
         location=effective_location,
         budget=target_budget,
+        cuisines=canonical_cuisines,
         min_rating=min_rating,
         additional_notes=effective_query,
+        pure_veg=is_pure_veg,
         max_results=max_results,
     )
 
@@ -996,7 +1067,12 @@ if submitted:
             cuisines_list = r.cuisine if isinstance(r.cuisine, list) else [str(r.cuisine)]
             cuisines_html = "".join([f'<span class="cuisine-badge-item">{c.title()}</span>' for c in cuisines_list[:5]])
 
-            veg_html = '<span class="veg-indicator">🌱 Pure Veg</span>' if is_pure_veg or any("veg" in c.lower() for c in cuisines_list) else ''
+            is_veg_card = getattr(r, "is_pure_veg", False) or is_pure_veg_restaurant({
+                "name": r.restaurant_name,
+                "cuisines": cuisines_list,
+                "highlights": [],
+            })
+            veg_html = '<span class="veg-indicator">🌱 Pure Veg</span>' if is_veg_card else ''
             loc_str = r.locality.title() if r.locality else city_clean_name
             addr_str = r.address if r.address else f"{loc_str}, {city_clean_name}"
 

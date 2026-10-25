@@ -61,6 +61,10 @@ class UserPreferences(BaseModel):
         le=10,
         description="Target number of recommendations to return (1-10)",
     )
+    pure_veg: bool = Field(
+        default=False,
+        description="Strictly filter for 100% pure vegetarian restaurants",
+    )
 
     @field_validator("location")
     @classmethod
@@ -93,6 +97,7 @@ class RestaurantCandidate(BaseModel):
     rating: float = Field(..., description="Rating on 0.0 - 5.0 scale")
     votes: int = Field(..., description="Total votes count")
     highlights: List[str] = Field(default_factory=list, description="Key features and dishes")
+    is_pure_veg: bool = Field(default=False, description="Whether the restaurant is strictly pure vegetarian")
 
 
 class RestaurantRecommendation(BaseModel):
@@ -109,6 +114,7 @@ class RestaurantRecommendation(BaseModel):
     )
     locality: Optional[str] = Field(default=None, description="Locality or neighborhood")
     address: Optional[str] = Field(default=None, description="Street address")
+    is_pure_veg: bool = Field(default=False, description="Whether the restaurant is strictly pure vegetarian")
 
 
 class RecommendationResponse(BaseModel):
