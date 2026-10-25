@@ -110,6 +110,9 @@ footer { visibility: hidden !important; display: none !important; }
 div[data-testid="stToolbarActions"] { display: none !important; }
 div[data-testid="stHeaderActionElements"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
+div[class*="viewerBadge"] { display: none !important; }
+[data-testid="stViewerBadge"] { display: none !important; }
+.viewerBadge_container__1QSob { display: none !important; }
 
 /* Base App Container */
 .main .block-container {
