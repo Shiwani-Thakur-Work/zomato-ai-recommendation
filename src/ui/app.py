@@ -65,10 +65,9 @@ def render_html(html_str: str) -> None:
     st.markdown(cleaned, unsafe_allow_html=True)
 
 
-# ── Asset Management & Base64 Image Caching ──────────────────────────────────
-@st.cache_data
+# ── Asset Management & Direct Base64 Image Loading ────────────────────────────
 def load_base64_image(filename: str) -> str:
-    """Load and base64-encode an asset image for instant HTML card rendering."""
+    """Load and base64-encode an asset image for instant HTML card rendering without stale caching."""
     asset_path = PROJECT_ROOT / "src" / "ui" / "assets" / filename
     if not asset_path.exists():
         alt_name = filename.replace("_thumb.jpg", ".jpg")
@@ -84,7 +83,7 @@ def get_restaurant_card_image(cuisines: list[str], name: str) -> str:
     """Match restaurant cuisine and name to the most fitting authentic food image."""
     c_str = (" ".join(cuisines) + " " + name).lower()
     if any(k in c_str for k in ["sweet", "mithai", "dessert", "bakery", "cake", "bikaner", "om sweets", "haldiram"]):
-        return load_base64_image("sweets_thumb.jpg")
+        return load_base64_image("mithai_thumb.jpg")
     if any(k in c_str for k in ["cafe", "coffee", "beverage", "tea", "sandwich", "breakfast", "continental", "italian", "pizza"]):
         return load_base64_image("cafe_thumb.jpg")
     if any(k in c_str for k in ["chaat", "street", "fast food", "roll", "snack", "burger", "tikki", "chole", "bhature"]):
@@ -1056,7 +1055,7 @@ render_html(
 thali_b64 = load_base64_image("thali_thumb.jpg")
 chaat_b64 = load_base64_image("chaat_thumb.jpg")
 cafe_b64 = load_base64_image("cafe_thumb.jpg")
-sweets_b64 = load_base64_image("sweets_thumb.jpg")
+sweets_b64 = load_base64_image("mithai_thumb.jpg")
 
 col_c1, col_c2, col_c3, col_c4 = st.columns(4)
 
@@ -1112,7 +1111,7 @@ with col_c4:
     render_html(
         f"""
         <div class="z-collection-card">
-            <img src="{sweets_b64}" class="z-collection-bg-img" alt="Heritage Sweets" />
+            <img src="{sweets_b64}" class="z-collection-bg-img" alt="Heritage Mithai & Sweets" />
             <div class="z-collection-overlay">
                 <div class="z-collection-name">Heritage Mithai & Sweets</div>
                 <div class="z-collection-places">12 Places &gt;</div>
