@@ -199,48 +199,6 @@ p, span, label, div {
     gap: 0.65rem !important;
 }
 
-/* ── Category Tabs (Delivery, Dining Out, Nightlife) ── */
-.zomato-tabs-bar {
-    display: flex !important;
-    gap: 2.2rem !important;
-    border-bottom: 1px solid #E8E8E8 !important;
-    margin-bottom: 1.4rem !important;
-    padding-bottom: 0.2rem !important;
-}
-
-.zomato-tab-item {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.65rem !important;
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-    color: var(--on-surface-muted) !important;
-    padding-bottom: 0.8rem !important;
-    cursor: pointer !important;
-    border-bottom: 3px solid transparent !important;
-    transition: all 0.2s ease !important;
-}
-
-.zomato-tab-item.active {
-    color: var(--primary) !important;
-    font-weight: 700 !important;
-    border-bottom: 3px solid var(--primary) !important;
-}
-
-.zomato-tab-icon-wrap {
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 50% !important;
-    background: #F8F8F8 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 1.25rem !important;
-}
-
-.zomato-tab-item.active .zomato-tab-icon-wrap {
-    background: #FFF5F5 !important;
-}
 
 /* ── Zomato Filter Pills Row ── */
 .zomato-filter-pills-row {
@@ -691,27 +649,6 @@ if st.session_state["view_mode"] == "orders":
 
 # ── VIEW: EXPLORE & RECOMMENDATIONS (PRIMARY VIEW) ───────────────────────────
 
-# 1. Category Switcher (Delivery, Dining Out, Nightlife)
-col_tab1, col_tab2, col_tab3, _ = st.columns([1.5, 1.5, 1.5, 3.5])
-with col_tab1:
-    is_dining = st.session_state["active_nav_tab"] == "dining_out"
-    if st.button("🍽️ Dining Out", use_container_width=True, type="primary" if is_dining else "secondary"):
-        st.session_state["active_nav_tab"] = "dining_out"
-        st.rerun()
-
-with col_tab2:
-    is_delivery = st.session_state["active_nav_tab"] == "delivery"
-    if st.button("🛵 Delivery", use_container_width=True, type="primary" if is_delivery else "secondary"):
-        st.session_state["active_nav_tab"] = "delivery"
-        st.rerun()
-
-with col_tab3:
-    is_nightlife = st.session_state["active_nav_tab"] == "nightlife"
-    if st.button("🍸 Nightlife & Cafes", use_container_width=True, type="primary" if is_nightlife else "secondary"):
-        st.session_state["active_nav_tab"] = "nightlife"
-        st.rerun()
-
-st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
 
 # 2. Taste Profile Personalization Callout (If user has past orders/saved venues)

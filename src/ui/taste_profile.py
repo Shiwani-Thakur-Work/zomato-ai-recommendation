@@ -76,8 +76,6 @@ def init_taste_profile_state() -> None:
         st.session_state["orders"] = []
     if "saved_restaurants" not in st.session_state:
         st.session_state["saved_restaurants"] = {}
-    if "active_nav_tab" not in st.session_state:
-        st.session_state["active_nav_tab"] = "dining_out"
     if "view_mode" not in st.session_state:
         st.session_state["view_mode"] = "explore"  # "explore" | "saved" | "orders" | "taste_profile"
 
