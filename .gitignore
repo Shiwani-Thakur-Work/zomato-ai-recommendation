@@ -12,8 +12,9 @@ __pycache__/
 *.env
 .streamlit/secrets.toml
 
-# ── Local Documentation (Untracked) ───────────
+# ── Local Documentation & Interview Prep (Untracked) ──
 docs/
+script.md
 
 # ── Data ──────────────────────────────────────
 data/raw/

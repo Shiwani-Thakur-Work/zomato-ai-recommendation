@@ -1,28 +1,30 @@
-# 🍽️ Zomato AI Restaurant Recommender
+# 🍽️ Zomato AI Restaurant Recommender & Dining Concierge
 
-[![Tests](https://img.shields.io/badge/pytest-93%20passed-brightgreen.svg)](#-testing)
+[![Live App](https://img.shields.io/badge/Live%20App-zomato--ai--recos.streamlit.app-E23744?style=for-the-badge&logo=streamlit)](https://zomato-ai-recos.streamlit.app/)
+[![Tests](https://img.shields.io/badge/pytest-96%20passed-brightgreen.svg)](#-testing)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![LLM](https://img.shields.io/badge/Groq-Llama%203.3%2070B-orange.svg)](https://console.groq.com/)
 [![UI](https://img.shields.io/badge/Streamlit-1.40+-red.svg)](https://streamlit.io/)
 [![Dataset](https://img.shields.io/badge/Dataset-33%2C476%2B%20Venues-E23744.svg)](#-dataset--city-coverage)
 
-An AI-powered restaurant recommendation web application styled in Zomato's signature luxury design language. It pairs comprehensive real-world dining data across major Indian culinary hubs with **Groq Cloud's ultra-low latency LPU inference** (`llama-3.3-70b-versatile`) to deliver grounded, hyper-personalized dining suggestions.
+> 🌐 **Live Web Application**: [https://zomato-ai-recos.streamlit.app/](https://zomato-ai-recos.streamlit.app/)  
+
+An AI-powered restaurant recommendation web application styled in Zomato's signature luxury design language. It pairs comprehensive real-world dining data across major Indian culinary hubs with **Groq Cloud's ultra-low latency LPU inference** (`llama-3.3-70b-versatile`) to deliver grounded, hyper-personalized dining suggestions with closed-loop taste profile learning.
 
 ---
 
 ## 🌟 Key Features & Highlights
 
 1. **Multi-City Real Restaurant Dataset**: Preprocessed and normalized catalog of **33,476+ verified restaurants** across Delhi NCR, Haryana, and Bangalore with comprehensive sanitization (cost strings, rating formats, transliterations, and cuisine canonicalization).
-2. **Signature Zomato Visual Experience**: Crafted with Zomato’s authentic visual identity (`#E23744`), clean card-based hierarchy, curated dining collection photography, and high-contrast typography.
-3. **Curated Dining Collections**: Quick one-click discovery for popular dining categories:
-   - 🍛 **Pure Veg & Thalis**: Authentic regional vegetarian feasts and thalis.
-   - 🥟 **Street Chaat & Snacks**: Crispy golgappas, tikki, and legendary street bites.
-   - ☕ **Cozy Cafes & Workspaces**: Artisan brews, continental snacks, and relaxed vibes.
-   - 🍬 **Mithai & Sweet Spots**: Fresh jalebis, gulab jamuns, and traditional confectioneries.
-4. **Deterministic Funnel Filtering**: Rapidly narrows down 33,000+ venues into top candidate pools using fuzzy locality/city matching (`rapidfuzz`), budget tiers, rating floors, and composite scoring ($\text{Rating} \times 0.5 + \log_{10}(\text{Votes} + 1) \times 0.3 + \text{CuisineMatch} \times 0.2$).
-5. **Adaptive Constraint Relaxation**: Automatically widens rating or budget thresholds when strict criteria yield fewer than 3 candidates, ensuring users always receive relevant alternatives.
-6. **Qualitative Groq LLM Reasoning**: Feeds candidate pools to `llama-3.3-70b-versatile` with strict JSON mode enforcement and anti-hallucination guards to synthesize personalized culinary justifications.
-7. **Heuristic Fallback Engine**: If the Groq API key is omitted or hits rate limits, the system seamlessly transitions to rule-based ranking without crashing or degrading the user experience.
+2. **Authentic Zomato Web Identity**: Crafted with Zomato’s authentic visual identity (`#E23744`), clean card-based hierarchy, category switcher (Delivery, Dining Out, Nightlife), curated dining collection photography, and high-contrast typography.
+3. **Pure-Veg Mode (`?veg=1`)**: Dedicated pure-veg filter pill turning vibrant green (`#EAF5EC` background, `#24963F` border) matching real Zomato behavior.
+4. **Interactive Simulated Food Ordering & Quick Order**: Clickable signature food items on every restaurant card with instantaneous order dispatch and receipt tracking.
+5. **Closed-Loop AI Taste Profile**: Automatically learns diner preferences from past orders and saved bookmarks to dynamically bias and personalize subsequent recommendation queries.
+6. **Curated Dining Collections**: Quick one-click discovery for popular dining categories (Pure Veg Thalis, Street Chaat, Cozy Cafes, Heritage Mithai).
+7. **Deterministic Funnel Filtering**: Rapidly narrows down 33,000+ venues into top candidate pools using fuzzy locality/city matching (`rapidfuzz`), budget tiers, rating floors, and composite scoring ($\text{Rating} \times 0.5 + \log_{10}(\text{Votes} + 1) \times 0.3 + \text{CuisineMatch} \times 0.2$).
+8. **Adaptive Constraint Relaxation**: Automatically widens rating or budget thresholds when strict criteria yield fewer than 3 candidates, ensuring users always receive relevant alternatives.
+9. **Qualitative Groq LLM Reasoning**: Feeds candidate pools to `llama-3.3-70b-versatile` with strict JSON mode enforcement and anti-hallucination guards to synthesize personalized culinary justifications.
+10. **Heuristic Fallback Engine**: If the Groq API key is omitted or hits rate limits, the system seamlessly transitions to rule-based ranking without crashing or degrading the user experience.
 
 ---
 

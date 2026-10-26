@@ -2,17 +2,18 @@
 app.py
 ------
 Consumer-facing Zomato AI Restaurant Recommendation Application.
-Styled with the authentic Zomato luxury app visual design language:
-- Light theme explicitly enforced with high-contrast, crystal-clear typography
-- Front-and-center, highlighted Hero Search & Filter console
-- Zero markdown code-block leaking (all HTML properly dedented without 4-space indentation)
-- Comprehensive multi-city support: Faridabad, Delhi NCR, Gurgaon, Haryana cities, and Bangalore
-- Real food photography for dining collections and recommendation cards
-- Strict veg-first curation (pure veg thalis, street chaat, cozy cafes, sweet shops)
-- Powered by Groq LLM (qwen/qwen3.8-27b) with robust heuristic fallback
-
-Launch locally:
-    uv run streamlit run src/ui/app.py
+Styled to authentically reflect Zomato's web & mobile experience:
+- Authentic Zomato visual identity (Zomato Red #E23744, forest green #24963F ratings)
+- Top navigation with search omnibar, category tabs (Delivery, Dining Out, Nightlife)
+- Horizontal filter pill bar with active Pure Veg green mode (matching zomato.com/ncr/restaurants?veg=1)
+- Interactive, clickable restaurant cards with:
+    1. Real-time "Save / Bookmark" toggle (stored in user session)
+    2. Interactive "View Menu & Quick Order" with clickable signature dishes
+    3. Direct Google Maps navigation links
+- Closed-loop AI Taste Profile: Learned preferences from orders & saved venues
+  dynamically enrich subsequent recommendations
+- 1-Click Curated Dining Collections (Pure Veg Thalis, Street Chaat, Cafes, Mithai)
+- Powered by Groq LLM (Llama 3.3 70B) with automatic Heuristic Fallback Engine
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import base64
 import os
 import sys
 import textwrap
+import urllib.parse
 from pathlib import Path
 
 # Add project root to sys.path so 'src' can be resolved
@@ -35,14 +37,25 @@ from src.config import DEFAULT_MAX_RESULTS, DEFAULT_MIN_RATING, GROQ_MODEL, MAX_
 from src.data.preprocessor import build_processed_dataset
 from src.engine.recommend import recommend
 from src.engine.schemas import BudgetTier, RecommendationResponse, UserPreferences
+from src.ui.taste_profile import (
+    add_order,
+    compute_user_taste_profile,
+    get_signature_dishes,
+    init_taste_profile_state,
+    is_restaurant_saved,
+    toggle_saved_restaurant,
+)
 
 # ── Streamlit Page Configuration ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="Zomato | AI Restaurant Recommendations",
+    page_title="Zomato | Restaurants & AI Dining Concierge",
     page_icon="🍽️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# Initialize Session State for Orders, Bookmarks, and Active Views
+init_taste_profile_state()
 
 
 # ── Clean HTML Rendering Helper (Prevents Markdown Code-Block Leakage) ─────────
@@ -79,23 +92,24 @@ def get_restaurant_card_image(cuisines: list[str], name: str) -> str:
     return load_base64_image("thali_thumb.jpg")
 
 
-# ── Bulletproof Light-Themed Zomato CSS Styling (Stitch Design System) ────────
+# ── Authentic Zomato Web CSS Design System ───────────────────────────────────
 ZOMATO_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
-/* Force Light Background & High Contrast Across ALL Systems & OS Modes */
 :root {
     color-scheme: light !important;
     --primary: #E23744;
-    --primary-container: #DB313F;
-    --secondary: #24963F;
-    --tertiary: #7B2CBF;
+    --primary-hover: #DB313F;
+    --secondary-green: #24963F;
+    --green-bg: #EAF5EC;
+    --green-border: #CEEAD6;
     --on-surface: #1C1C1C;
-    --on-surface-variant: #696969;
+    --on-surface-subtle: #4F4F4F;
+    --on-surface-muted: #828282;
     --surface-bg: #F8F9FA;
     --surface-card: #FFFFFF;
-    --border-color: #EAEAEA;
+    --border-color: #E8E8E8;
     --border-subtle: #FCD4D4;
 }
 
@@ -109,7 +123,7 @@ html {
     color: var(--on-surface) !important;
 }
 
-/* Hide ALL Streamlit Developer Chrome & Deploy Buttons */
+/* Hide Streamlit Chrome */
 #MainMenu { visibility: hidden !important; display: none !important; }
 header { visibility: hidden !important; display: none !important; }
 footer { visibility: hidden !important; display: none !important; }
@@ -122,786 +136,666 @@ div[data-testid="stHeaderActionElements"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 div[class*="viewerBadge"] { display: none !important; }
 [data-testid="stViewerBadge"] { display: none !important; }
-.viewerBadge_container__1QSob { display: none !important; }
 
-/* Base App Container */
+/* Container width & typography */
 .main .block-container {
-    padding-top: 1.2rem !important;
+    padding-top: 0.8rem !important;
     padding-bottom: 3.5rem !important;
-    max-width: 1220px !important;
+    max-width: 1240px !important;
 }
 
-/* Typography Overrides */
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif !important;
     color: var(--on-surface) !important;
     font-weight: 700 !important;
-    letter-spacing: -0.015em !important;
 }
 
 p, span, label, div {
-    font-family: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    color: var(--on-surface);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-/* ── Zomato Top Navigation Bar (Stitch Elevated) ── */
-.zomato-nav-bar {
-    background: rgba(255, 255, 255, 0.95) !important;
-    backdrop-filter: blur(12px) !important;
+/* ── Zomato Top Navigation Bar ── */
+.zomato-header-navbar {
+    background: #FFFFFF !important;
     border: 1px solid var(--border-color) !important;
-    border-radius: 18px !important;
-    padding: 0.95rem 1.6rem !important;
-    margin-bottom: 1.6rem !important;
+    border-radius: 16px !important;
+    padding: 0.85rem 1.4rem !important;
+    margin-bottom: 1.2rem !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
 }
 
-.brand-section {
+.zomato-brand-group {
     display: flex !important;
     align-items: center !important;
-    gap: 1.1rem !important;
+    gap: 0.85rem !important;
 }
 
-.zomato-logo-text {
+.zomato-logo-main {
     font-family: 'Outfit', sans-serif !important;
-    font-size: 2.25rem !important;
+    font-size: 2.3rem !important;
     font-weight: 800 !important;
     color: var(--primary) !important;
-    letter-spacing: -0.04em !important;
+    letter-spacing: -0.05em !important;
     font-style: italic !important;
     line-height: 1 !important;
 }
 
-.ai-logo-tag {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-style: normal !important;
-    font-weight: 800 !important;
-    color: var(--tertiary) !important;
-    font-size: 1.7rem !important;
-    margin-left: -2px !important;
-}
-
-.nav-city-badge {
-    background: #FFF5F5 !important;
-    color: var(--primary) !important;
-    border: 1px solid var(--border-subtle) !important;
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-    padding: 0.35rem 0.85rem !important;
-    border-radius: 9999px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.35rem !important;
-}
-
-.nav-right-cluster {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.75rem !important;
-}
-
-@keyframes pulse-ring {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(1.2); }
-}
-
-.pulse-dot-wrap {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 8px !important;
-    height: 8px !important;
-    border-radius: 50% !important;
-    background-color: var(--secondary) !important;
-    box-shadow: 0 0 0 3px rgba(36, 150, 63, 0.22) !important;
-    animation: pulse-ring 2s infinite ease-in-out !important;
-    margin-right: 6px !important;
-}
-
-.ai-concierge-pill {
-    background: #F0EDED !important;
-    color: var(--on-surface) !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    padding: 0.35rem 0.85rem !important;
-    border-radius: 9999px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    border: 1px solid #E5E2E1 !important;
-}
-
-.cli-badge-pill {
-    background: #FFF5F5 !important;
+.zomato-ai-badge {
+    background: #FFF0F2 !important;
     color: var(--primary) !important;
     border: 1px solid var(--border-subtle) !important;
     font-size: 0.75rem !important;
-    font-weight: 700 !important;
-    padding: 0.32rem 0.75rem !important;
+    font-weight: 800 !important;
+    padding: 0.22rem 0.65rem !important;
     border-radius: 9999px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.4px !important;
+    letter-spacing: 0.5px !important;
 }
 
-/* ── HIGHLIGHTED HERO SEARCH CONSOLE (Stitch Top Stripe) ── */
-.search-console-hero {
-    position: relative !important;
-    overflow: hidden !important;
-    background: var(--surface-card) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 20px !important;
-    padding: 2.2rem 2.4rem 1.8rem 2.4rem !important;
-    margin-bottom: 2rem !important;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05) !important;
-}
-
-.search-console-hero::before {
-    content: '' !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    height: 4px !important;
-    background: linear-gradient(90deg, #E23744 0%, #DB313F 45%, #7B2CBF 100%) !important;
-}
-
-.hero-top-row {
+.zomato-nav-actions {
     display: flex !important;
-    justify-content: space-between !important;
-    align-items: flex-start !important;
-    gap: 1.5rem !important;
+    align-items: center !important;
+    gap: 0.65rem !important;
+}
+
+/* ── Category Tabs (Delivery, Dining Out, Nightlife) ── */
+.zomato-tabs-bar {
+    display: flex !important;
+    gap: 2.2rem !important;
+    border-bottom: 1px solid #E8E8E8 !important;
+    margin-bottom: 1.4rem !important;
+    padding-bottom: 0.2rem !important;
+}
+
+.zomato-tab-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.65rem !important;
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+    color: var(--on-surface-muted) !important;
+    padding-bottom: 0.8rem !important;
+    cursor: pointer !important;
+    border-bottom: 3px solid transparent !important;
+    transition: all 0.2s ease !important;
+}
+
+.zomato-tab-item.active {
+    color: var(--primary) !important;
+    font-weight: 700 !important;
+    border-bottom: 3px solid var(--primary) !important;
+}
+
+.zomato-tab-icon-wrap {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 50% !important;
+    background: #F8F8F8 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 1.25rem !important;
+}
+
+.zomato-tab-item.active .zomato-tab-icon-wrap {
+    background: #FFF5F5 !important;
+}
+
+/* ── Zomato Filter Pills Row ── */
+.zomato-filter-pills-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.65rem !important;
     flex-wrap: wrap !important;
     margin-bottom: 1.6rem !important;
 }
 
-.hero-brand-tag {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.4rem !important;
-    background: #FFF5F5 !important;
-    color: var(--primary) !important;
-    border: 1px solid var(--border-subtle) !important;
-    font-size: 0.74rem !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.8px !important;
-    text-transform: uppercase !important;
-    padding: 0.28rem 0.8rem !important;
-    border-radius: 9999px !important;
-    margin-bottom: 0.65rem !important;
-}
-
-.hero-main-title {
-    font-size: 2.2rem !important;
-    font-weight: 800 !important;
-    color: var(--on-surface) !important;
-    margin: 0 0 0.4rem 0 !important;
-    line-height: 1.2 !important;
-    letter-spacing: -0.02em !important;
-}
-
-.hero-subtext {
-    font-size: 0.98rem !important;
-    color: var(--on-surface-variant) !important;
-    margin: 0 !important;
-    font-weight: 500 !important;
-    max-width: 650px !important;
-    line-height: 1.5 !important;
-}
-
-.hero-telemetry-badge {
-    background: #F6F3F2 !important;
-    border: 1px solid #EAE7E7 !important;
-    border-radius: 14px !important;
-    padding: 0.65rem 1.1rem !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.75rem !important;
-}
-
-.telemetry-icon {
-    font-size: 1.25rem !important;
-    color: var(--secondary) !important;
-    font-weight: 800 !important;
-}
-
-.telemetry-label {
-    font-size: 0.72rem !important;
-    color: var(--on-surface-variant) !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-}
-
-.telemetry-val {
-    font-size: 0.9rem !important;
-    font-weight: 800 !important;
-    color: var(--on-surface) !important;
-}
-
-/* Form Controls & Inputs */
-.stTextInput > div > div > input {
-    background-color: #FFFFFF !important;
-    color: var(--on-surface) !important;
-    border: 1.5px solid #D0D5DD !important;
-    border-radius: 12px !important;
-    padding: 0.65rem 0.95rem !important;
-    font-size: 0.95rem !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
-}
-
-.stTextInput > div > div > input:focus {
-    border-color: var(--primary) !important;
-    box-shadow: 0 0 0 3px rgba(226, 55, 68, 0.15) !important;
-}
-
-.stSelectbox > div > div {
-    background-color: #FFFFFF !important;
-    color: var(--on-surface) !important;
-    border: 1.5px solid #D0D5DD !important;
-    border-radius: 12px !important;
-}
-
-label[data-testid="stWidgetLabel"] p {
-    font-weight: 700 !important;
-    color: var(--on-surface) !important;
-    font-size: 0.92rem !important;
-    letter-spacing: -0.01em !important;
-}
-
-/* Big Red Submit CTA Button */
-.stButton > button {
-    background: linear-gradient(135deg, #E23744 0%, #D32330 100%) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 800 !important;
-    font-size: 1.15rem !important;
-    padding: 0.85rem 2rem !important;
-    border-radius: 14px !important;
-    width: 100% !important;
-    box-shadow: 0 6px 20px rgba(226, 55, 68, 0.32) !important;
-    transition: all 0.25s ease !important;
-    cursor: pointer !important;
-    margin-top: 0.75rem !important;
-    letter-spacing: 0.01em !important;
-}
-
-.stButton > button:hover {
-    background: linear-gradient(135deg, #D32330 0%, #B81D28 100%) !important;
-    box-shadow: 0 8px 26px rgba(226, 55, 68, 0.45) !important;
-    transform: translateY(-2px) !important;
-}
-
-/* Quick Suggestion Pills Bar */
-.quick-chips-wrapper {
-    margin-top: 1.2rem !important;
-    padding-top: 1rem !important;
-    border-top: 1px dashed var(--border-color) !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
-    flex-wrap: wrap !important;
-}
-
-.quick-chip-label {
-    font-size: 0.82rem !important;
-    font-weight: 700 !important;
-    color: var(--on-surface-variant) !important;
-    margin-right: 0.3rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-}
-
-.quick-chip-item {
-    background: #FFF5F5 !important;
-    color: var(--primary) !important;
-    border: 1px solid var(--border-subtle) !important;
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-    padding: 0.32rem 0.85rem !important;
-    border-radius: 9999px !important;
-    display: inline-block !important;
-    transition: all 0.2s ease !important;
-}
-
-.quick-chip-item:hover {
-    background: #FFEBEB !important;
-    border-color: var(--primary) !important;
-}
-
-/* ── AI CURATOR STRATEGY BANNER (Stitch Inspired) ── */
-.ai-strategy-card {
-    background: linear-gradient(135deg, rgba(226, 55, 68, 0.04) 0%, rgba(123, 44, 191, 0.05) 100%) !important;
-    border: 1px solid rgba(226, 55, 68, 0.16) !important;
-    border-radius: 18px !important;
-    padding: 1.4rem 1.6rem !important;
-    margin-bottom: 2rem !important;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03) !important;
-}
-
-.strategy-header {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    margin-bottom: 0.6rem !important;
-    flex-wrap: wrap !important;
-    gap: 0.6rem !important;
-}
-
-.strategy-title {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 800 !important;
-    color: var(--on-surface) !important;
-    font-size: 1.05rem !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.4rem !important;
-}
-
-.strategy-badge {
+.z-pill {
     background: #FFFFFF !important;
-    color: var(--on-surface-variant) !important;
-    border: 1px solid var(--border-color) !important;
-    font-size: 0.75rem !important;
-    font-family: monospace !important;
-    padding: 0.25rem 0.65rem !important;
-    border-radius: 9999px !important;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
-}
-
-.strategy-body {
-    font-size: 0.95rem !important;
-    color: var(--on-surface) !important;
-    line-height: 1.6 !important;
-    margin: 0 !important;
-}
-
-.strategy-relaxation-pill {
+    border: 1px solid #CFCFCF !important;
+    color: #4F4F4F !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    padding: 0.45rem 0.95rem !important;
+    border-radius: 8px !important;
     display: inline-flex !important;
     align-items: center !important;
-    gap: 0.4rem !important;
-    background: #F1DBFF !important;
-    color: #4A1570 !important;
-    font-size: 0.8rem !important;
+    gap: 0.45rem !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.z-pill-veg-active {
+    background: var(--green-bg) !important;
+    border: 1.5px solid var(--secondary-green) !important;
+    color: #137333 !important;
     font-weight: 700 !important;
-    padding: 0.35rem 0.8rem !important;
-    border-radius: 10px !important;
-    margin-top: 0.8rem !important;
 }
 
-/* ── RECOMMENDATION RESULTS CARDS (Stitch Luxury Layout) ── */
-.results-header-banner {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    margin: 2.2rem 0 1.2rem 0 !important;
-    padding-bottom: 0.8rem !important;
-    border-bottom: 2px solid var(--border-color) !important;
+.z-veg-dot {
+    width: 10px !important;
+    height: 10px !important;
+    border-radius: 50% !important;
+    background-color: var(--secondary-green) !important;
+    display: inline-block !important;
 }
 
-.results-header-banner h3 {
-    font-size: 1.5rem !important;
+/* ── Authentic Zomato Collections Grid ── */
+.collections-title-cluster {
+    margin: 1.6rem 0 1rem 0 !important;
+}
+
+.collections-title {
+    font-size: 1.65rem !important;
     font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
     color: var(--on-surface) !important;
     margin: 0 !important;
 }
 
-.zomato-restaurant-card {
-    background: var(--surface-card) !important;
+.collections-subtitle {
+    font-size: 0.95rem !important;
+    color: var(--on-surface-subtle) !important;
+    margin-top: 0.25rem !important;
+}
+
+.z-collection-card {
+    position: relative !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    height: 220px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+    cursor: pointer !important;
+    transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.z-collection-card:hover {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 8px 24px rgba(226, 55, 68, 0.16) !important;
+}
+
+.z-collection-bg-img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+}
+
+.z-collection-overlay {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding: 1.1rem 1rem !important;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%) !important;
+    color: #FFFFFF !important;
+}
+
+.z-collection-name {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: #FFFFFF !important;
+    margin-bottom: 0.2rem !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.z-collection-places {
+    font-size: 0.82rem !important;
+    color: #E0E0E0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+
+/* ── Zomato Restaurant Card (Exact Web UI Match) ── */
+.zomato-card-container {
+    background: #FFFFFF !important;
     border: 1px solid var(--border-color) !important;
-    border-radius: 18px !important;
-    padding: 1.5rem 1.7rem !important;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05) !important;
-    margin-bottom: 1.4rem !important;
-    transition: all 0.25s ease !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    margin-bottom: 1.5rem !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-.zomato-restaurant-card:hover {
-    border-color: var(--primary) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 26px rgba(226, 55, 68, 0.12) !important;
+.zomato-card-container:hover {
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.09) !important;
+    border-color: #D6D6D6 !important;
 }
 
-.card-top-header {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    flex-wrap: wrap !important;
-    gap: 0.8rem !important;
-    margin-bottom: 0.5rem !important;
+.z-card-image-wrap {
+    position: relative !important;
+    height: 200px !important;
+    overflow: hidden !important;
+    background: #EEEEEE !important;
 }
 
-.card-title-cluster {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.75rem !important;
-    flex-wrap: wrap !important;
+.z-card-img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    transition: transform 0.4s ease !important;
 }
 
-.match-rank-badge {
-    background: #FFF5F5 !important;
-    color: var(--primary) !important;
-    border: 1px solid var(--border-subtle) !important;
+.zomato-card-container:hover .z-card-img {
+    transform: scale(1.03) !important;
+}
+
+.z-badge-offer {
+    position: absolute !important;
+    bottom: 12px !important;
+    left: 12px !important;
+    background: #256FEF !important;
+    color: #FFFFFF !important;
     font-size: 0.75rem !important;
     font-weight: 800 !important;
-    padding: 0.28rem 0.7rem !important;
-    border-radius: 9999px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
+    padding: 0.25rem 0.65rem !important;
+    border-radius: 6px !important;
+    letter-spacing: 0.3px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
 }
 
-.restaurant-title {
-    font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif !important;
-    font-size: 1.4rem !important;
-    font-weight: 800 !important;
+.z-badge-rank {
+    position: absolute !important;
+    top: 12px !important;
+    left: 12px !important;
+    background: rgba(28, 28, 28, 0.88) !important;
+    backdrop-filter: blur(4px) !important;
+    color: #FFFFFF !important;
+    font-size: 0.74rem !important;
+    font-weight: 700 !important;
+    padding: 0.25rem 0.65rem !important;
+    border-radius: 6px !important;
+}
+
+.z-card-content {
+    padding: 1.15rem 1.3rem !important;
+}
+
+.z-card-row-1 {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    margin-bottom: 0.35rem !important;
+}
+
+.z-restaurant-name {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
     color: var(--on-surface) !important;
     margin: 0 !important;
     line-height: 1.25 !important;
 }
 
-.rating-badge-pill {
-    background: var(--secondary) !important;
+.z-rating-pill {
+    background: var(--secondary-green) !important;
     color: #FFFFFF !important;
-    font-weight: 800 !important;
-    font-size: 1rem !important;
-    padding: 0.35rem 0.75rem !important;
-    border-radius: 8px !important;
-    display: inline-flex !important;
-    align-items: baseline !important;
-    gap: 0.2rem !important;
-    box-shadow: 0 2px 6px rgba(36, 150, 63, 0.25) !important;
-}
-
-.rating-sub {
-    font-size: 0.72rem !important;
-    font-weight: 600 !important;
-    opacity: 0.85 !important;
-}
-
-.locality-subrow {
-    font-size: 0.92rem !important;
-    color: var(--on-surface-variant) !important;
-    margin-bottom: 0.75rem !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
-    flex-wrap: wrap !important;
-}
-
-.meta-dot {
-    color: #C0C0C0 !important;
-}
-
-.cost-highlight {
+    font-size: 0.88rem !important;
     font-weight: 700 !important;
+    padding: 0.25rem 0.6rem !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    flex-shrink: 0 !important;
+}
+
+.z-card-row-2 {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 0.92rem !important;
+    color: var(--on-surface-subtle) !important;
+    margin-bottom: 0.3rem !important;
+}
+
+.z-cuisines-text {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 70% !important;
+}
+
+.z-cost-text {
+    font-weight: 600 !important;
     color: var(--on-surface) !important;
 }
 
-.cuisines-row {
-    display: flex !important;
-    align-items: center !important;
-    flex-wrap: wrap !important;
-    gap: 0.4rem !important;
-    margin-bottom: 0.85rem !important;
+.z-card-row-3 {
+    font-size: 0.85rem !important;
+    color: var(--on-surface-muted) !important;
+    margin-bottom: 0.75rem !important;
 }
 
-.cuisine-badge-item {
-    background: #FFF5F5 !important;
-    color: var(--primary) !important;
-    border: 1px solid var(--border-subtle) !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-    padding: 0.25rem 0.65rem !important;
-    border-radius: 9999px !important;
-    display: inline-block !important;
-}
-
-.veg-indicator {
-    background: #E6F4EA !important;
-    color: #137333 !important;
-    border: 1px solid #CEEAD6 !important;
-    font-size: 0.8rem !important;
-    font-weight: 700 !important;
-    padding: 0.25rem 0.65rem !important;
-    border-radius: 9999px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 4px !important;
-}
-
-/* AI Recommendation Insight Box (Stitch Signature) */
-.ai-insight-box {
+/* AI Justification Box */
+.z-ai-justification {
     background: #FFFDF9 !important;
-    border-left: 4px solid var(--primary) !important;
+    border-left: 3.5px solid var(--primary) !important;
     border: 1px solid #F5ECE0 !important;
-    border-left-width: 4px !important;
-    border-radius: 0 12px 12px 0 !important;
-    padding: 0.95rem 1.25rem !important;
-    margin-top: 0.9rem !important;
+    border-left-width: 3.5px !important;
+    border-radius: 0 8px 8px 0 !important;
+    padding: 0.75rem 1rem !important;
+    margin-top: 0.7rem !important;
 }
 
-.ai-insight-title {
-    font-size: 0.78rem !important;
+.z-ai-title {
+    font-size: 0.75rem !important;
     font-weight: 800 !important;
     color: var(--primary) !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.6px !important;
-    margin-bottom: 0.3rem !important;
+    letter-spacing: 0.5px !important;
+    margin-bottom: 0.25rem !important;
     display: flex !important;
     align-items: center !important;
     gap: 0.3rem !important;
 }
 
-.ai-insight-text {
-    font-size: 0.92rem !important;
+.z-ai-text {
+    font-size: 0.88rem !important;
     color: #2D2D2D !important;
-    line-height: 1.55 !important;
+    line-height: 1.5 !important;
     margin: 0 !important;
 }
 
-.card-footer-action-row {
-    margin-top: 1rem !important;
-    padding-top: 0.85rem !important;
-    border-top: 1px solid #F0EDED !important;
+/* Interactive Food Menu Shelf */
+.menu-shelf-container {
+    background: #FDFDFD !important;
+    border: 1px dashed #E0E0E0 !important;
+    border-radius: 10px !important;
+    padding: 0.85rem !important;
+    margin-top: 0.85rem !important;
+}
+
+.menu-shelf-header {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    color: var(--on-surface) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.4px !important;
+    margin-bottom: 0.55rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+
+.menu-item-card {
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
-    flex-wrap: wrap !important;
-    gap: 0.5rem !important;
-}
-
-.card-address-text {
-    font-size: 0.84rem !important;
-    color: var(--on-surface-variant) !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 4px !important;
-}
-
-.card-action-btn-group {
-    display: flex !important;
-    gap: 0.5rem !important;
-}
-
-.card-btn-outline {
-    font-size: 0.82rem !important;
-    font-weight: 700 !important;
-    padding: 0.35rem 0.85rem !important;
+    background: #FFFFFF !important;
+    border: 1px solid #ECECEC !important;
     border-radius: 8px !important;
-    background: #F8F9FA !important;
-    border: 1px solid #EAEAEA !important;
-    color: var(--on-surface) !important;
-    text-decoration: none !important;
-    display: inline-block !important;
+    padding: 0.55rem 0.85rem !important;
+    margin-bottom: 0.45rem !important;
 }
 
-/* ── DINING COLLECTIONS GRID (Stitch Elevated) ── */
-.collection-section-header {
-    font-size: 1.5rem !important;
-    font-weight: 800 !important;
-    color: var(--on-surface) !important;
-    margin: 2.8rem 0 1.2rem 0 !important;
+.menu-item-info {
     display: flex !important;
     align-items: center !important;
     gap: 0.5rem !important;
 }
 
-.collection-card {
-    background: var(--surface-card) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 18px !important;
-    overflow: hidden !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05) !important;
-    transition: all 0.25s ease-in-out !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-.collection-card:hover {
-    transform: translateY(-4px) !important;
-    box-shadow: 0 10px 26px rgba(226, 55, 68, 0.12) !important;
-    border-color: var(--border-subtle) !important;
-}
-
-.collection-img {
-    width: 100% !important;
-    height: 165px !important;
-    object-fit: cover !important;
-    display: block !important;
-    transition: transform 0.4s ease !important;
-}
-
-.collection-card:hover .collection-img {
-    transform: scale(1.03) !important;
-}
-
-.collection-tag {
-    display: inline-block !important;
-    font-size: 0.7rem !important;
-    font-weight: 800 !important;
-    color: var(--primary) !important;
-    background: #FFF5F5 !important;
-    padding: 0.18rem 0.55rem !important;
-    border-radius: 9999px !important;
-    letter-spacing: 0.5px !important;
-    margin-bottom: 0.4rem !important;
-}
-
-.collection-body {
-    padding: 1.2rem 1.4rem !important;
-    flex: 1 !important;
-    background: var(--surface-card) !important;
-}
-
-.collection-body h4 {
-    font-size: 1.15rem !important;
-    font-weight: 800 !important;
-    color: var(--on-surface) !important;
-    margin: 0 0 0.4rem 0 !important;
-}
-
-.collection-body p {
+.menu-item-name {
     font-size: 0.88rem !important;
-    color: var(--on-surface-variant) !important;
-    line-height: 1.5 !important;
-    margin: 0 !important;
-    font-weight: 400 !important;
+    font-weight: 600 !important;
+    color: var(--on-surface) !important;
+}
+
+.menu-item-price {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    color: var(--on-surface-subtle) !important;
+}
+
+/* Taste Profile Banner */
+.taste-profile-banner {
+    background: linear-gradient(135deg, #FFF5F5 0%, #FFFFFF 100%) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 12px !important;
+    padding: 0.85rem 1.25rem !important;
+    margin-bottom: 1.25rem !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    box-shadow: 0 2px 8px rgba(226, 55, 68, 0.05) !important;
+}
+
+.taste-text-title {
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+    color: var(--primary) !important;
+}
+
+.taste-text-sub {
+    font-size: 0.82rem !important;
+    color: var(--on-surface-subtle) !important;
 }
 </style>
 """
-
 render_html(ZOMATO_CSS)
 
 
-# ── Load Dataset ──────────────────────────────────────────────────────────────
-@st.cache_data
-def get_dataset() -> pd.DataFrame:
-    """Load canonical cleaned dataset from parquet."""
-    try:
-        return build_processed_dataset()
-    except Exception as exc:
-        st.error(f"Error loading restaurant dataset: {exc}")
-        return pd.DataFrame()
+# ── DATASET CACHE LOADER ──────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def get_cached_dataset() -> pd.DataFrame:
+    """Load cleaned Parquet dataset into memory."""
+    return build_processed_dataset()
 
 
-dataset = get_dataset()
+try:
+    dataset = get_cached_dataset()
+except Exception as exc:
+    st.error(f"Error loading restaurant dataset: {exc}")
+    dataset = pd.DataFrame()
 
 
-# ── ZOMATO TOP NAVIGATION BAR (Clean & User-Centric) ─────────────────────────
-render_html(
-    """
-    <div class="zomato-nav-bar">
-        <div class="brand-section">
-            <span class="zomato-logo-text">zomato <span class="ai-logo-tag">AI</span></span>
-            <span class="nav-city-badge">📍 Delhi NCR • Bangalore • Faridabad (33,476+ Places)</span>
-        </div>
-        <div class="nav-right-cluster">
-            <div class="ai-concierge-pill">
-                <span class="pulse-dot-wrap"></span>
-                <span>AI Dining Concierge Active</span>
-            </div>
-        </div>
+# ── TOP NAVIGATION BAR ────────────────────────────────────────────────────────
+taste_stats = compute_user_taste_profile()
+saved_count = len(st.session_state["saved_restaurants"])
+orders_count = len(st.session_state["orders"])
+
+saved_badge = f"❤️ Saved ({saved_count})" if saved_count > 0 else "❤️ Saved"
+orders_badge = f"🛍️ Orders ({orders_count})" if orders_count > 0 else "🛍️ Orders"
+
+nav_html = f"""
+<div class="zomato-header-navbar">
+    <div class="zomato-brand-group">
+        <span class="zomato-logo-main">zomato</span>
+        <span class="zomato-ai-badge">AI CONCIERGE</span>
     </div>
-    """
-)
+    <div class="zomato-nav-actions">
+        <span style="font-size:0.85rem; color:#828282; font-weight:600;">Delhi NCR • Bangalore</span>
+    </div>
+</div>
+"""
+render_html(nav_html)
+
+# Top Bar Views Switcher (Explore | Saved Favorites | Orders & Taste Profile)
+nav_col1, nav_col2, nav_col3, nav_col4 = st.columns([2.5, 1.2, 1.2, 1.4])
+with nav_col2:
+    if st.button("🍽️ Explore Places", use_container_width=True, type="primary" if st.session_state["view_mode"] == "explore" else "secondary"):
+        st.session_state["view_mode"] = "explore"
+        st.rerun()
+
+with nav_col3:
+    if st.button(saved_badge, use_container_width=True, type="primary" if st.session_state["view_mode"] == "saved" else "secondary"):
+        st.session_state["view_mode"] = "saved"
+        st.rerun()
+
+with nav_col4:
+    if st.button(orders_badge, use_container_width=True, type="primary" if st.session_state["view_mode"] == "orders" else "secondary"):
+        st.session_state["view_mode"] = "orders"
+        st.rerun()
 
 
-# ── MAIN SCREEN: HIGHLIGHTED HERO SEARCH & FILTER CONSOLE ─────────────────────
-render_html(
-    """
-    <div class="search-console-hero">
-        <div class="hero-top-row">
-            <div>
-                <div class="hero-brand-tag">✨ AI-POWERED RESTAURANT DISCOVERY</div>
-                <h1 class="hero-main-title">What are you craving today?</h1>
-                <p class="hero-subtext">Discover handpicked dining spots and hidden gems tailored dynamically to your taste, budget, and dining mood.</p>
-            </div>
-            <div class="hero-telemetry-badge">
-                <span class="telemetry-icon">✓</span>
+# ── VIEW: SAVED FAVORITES ─────────────────────────────────────────────────────
+if st.session_state["view_mode"] == "saved":
+    st.markdown("### ❤️ Your Saved Places")
+    saved_dict = st.session_state["saved_restaurants"]
+    if not saved_dict:
+        st.info("You haven't saved any restaurants yet. Click '❤️ Save' on any restaurant card to bookmark your favorite spots!")
+    else:
+        st.write(f"You have **{len(saved_dict)}** saved spots.")
+        for name, r in list(saved_dict.items()):
+            col_s1, col_s2 = st.columns([3.5, 1])
+            with col_s1:
+                st.markdown(f"**{name}** — ⭐ {r.get('rating', '4.0')} | 📍 {r.get('locality', 'City')} | 💰 {r.get('estimated_cost', '₹600 for two')}")
+                st.caption(f"Cuisines: {', '.join(r.get('cuisine', [])) if isinstance(r.get('cuisine'), list) else r.get('cuisine')}")
+            with col_s2:
+                if st.button(f"Remove", key=f"del_saved_{name}"):
+                    del st.session_state["saved_restaurants"][name]
+                    st.rerun()
+            st.divider()
+    st.stop()
+
+
+# ── VIEW: ORDERS & TASTE PROFILE ──────────────────────────────────────────────
+if st.session_state["view_mode"] == "orders":
+    st.markdown("### 🛍️ Your Food Orders & AI Taste Profile")
+    orders = st.session_state["orders"]
+
+    # Taste Profile Summary Card
+    if taste_stats["has_profile"]:
+        render_html(
+            f"""
+            <div class="taste-profile-banner">
                 <div>
-                    <div class="telemetry-label">Curated Selection</div>
-                    <div class="telemetry-val">33,476+ Verified Places</div>
+                    <div class="taste-text-title">✨ AI Taste Profile Active</div>
+                    <div class="taste-text-sub">{taste_stats['badge_summary']}</div>
+                </div>
+                <div style="font-size:0.82rem; font-weight:700; color:#1C1C1C;">
+                    Avg Item Spend: ₹{taste_stats['avg_spend']}
                 </div>
             </div>
+            """
+        )
+
+    if not orders:
+        st.info("No past orders yet. Click **'🍽️ View Menu & Order'** on any restaurant recommendation card to place a simulated order and train your AI taste profile!")
+    else:
+        for o in orders:
+            col_o1, col_o2 = st.columns([3.5, 1])
+            with col_o1:
+                st.markdown(f"**{o['item_name']}** from **{o['restaurant_name']}**")
+                st.caption(f"ID: {o['order_id']} • {o['locality']} • {o['timestamp']} • Cuisine: {o['cuisine']}")
+            with col_o2:
+                st.markdown(f"**₹{o['price']}**")
+                st.caption(f"{o['status']}")
+            st.divider()
+
+        if st.button("Clear Order History"):
+            st.session_state["orders"] = []
+            st.rerun()
+    st.stop()
+
+
+# ── VIEW: EXPLORE & RECOMMENDATIONS (PRIMARY VIEW) ───────────────────────────
+
+# 1. Category Switcher (Delivery, Dining Out, Nightlife)
+col_tab1, col_tab2, col_tab3, _ = st.columns([1.5, 1.5, 1.5, 3.5])
+with col_tab1:
+    is_dining = st.session_state["active_nav_tab"] == "dining_out"
+    if st.button("🍽️ Dining Out", use_container_width=True, type="primary" if is_dining else "secondary"):
+        st.session_state["active_nav_tab"] = "dining_out"
+        st.rerun()
+
+with col_tab2:
+    is_delivery = st.session_state["active_nav_tab"] == "delivery"
+    if st.button("🛵 Delivery", use_container_width=True, type="primary" if is_delivery else "secondary"):
+        st.session_state["active_nav_tab"] = "delivery"
+        st.rerun()
+
+with col_tab3:
+    is_nightlife = st.session_state["active_nav_tab"] == "nightlife"
+    if st.button("🍸 Nightlife & Cafes", use_container_width=True, type="primary" if is_nightlife else "secondary"):
+        st.session_state["active_nav_tab"] = "nightlife"
+        st.rerun()
+
+st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+
+
+# 2. Taste Profile Personalization Callout (If user has past orders/saved venues)
+if taste_stats["has_profile"]:
+    render_html(
+        f"""
+        <div class="taste-profile-banner">
+            <div>
+                <div class="taste-text-title">✨ AI Personalization Feedback Loop Active</div>
+                <div class="taste-text-sub">{taste_stats['badge_summary']}</div>
+            </div>
+            <div style="font-size:0.8rem; background:#EAF5EC; color:#137333; font-weight:700; padding:0.25rem 0.65rem; border-radius:9999px;">
+                Taste Profile Synced
+            </div>
         </div>
-    </div>
-    """
-)
+        """
+    )
 
-# Search Form placed directly on the main page for maximum visibility
-with st.form("main_search_form"):
-    # Row 1: City, Area, and Craving Inputs
-    col_city, col_locality, col_craving = st.columns([1.3, 1.3, 2.4])
 
-    with col_city:
+# 3. Zomato Omnisearch & Filters Console
+with st.form("zomato_search_console"):
+    # Row 1: Unified Search Omnibar
+    col_c, col_loc, col_search = st.columns([1.3, 1.2, 2.5])
+
+    with col_c:
         city_display_map = {
-            "Faridabad (Haryana)": "faridabad",
-            "Delhi (NCR)": "delhi",
-            "Gurgaon / Gurugram (Haryana)": "gurgaon",
-            "Noida (NCR)": "noida",
-            "Bangalore / Bengaluru (Karnataka)": "bangalore",
-            "Rohtak (Haryana)": "rohtak",
-            "Panipat (Haryana)": "panipat",
-            "Hisar (Haryana)": "hisar",
-            "Ambala (Haryana)": "ambala",
-            "Sonipat (Haryana)": "sonipat",
-            "Karnal (Haryana)": "karnal",
-            "Bahadurgarh (Haryana)": "bahadurgarh",
-            "All Regions (Delhi NCR, Haryana & Bangalore)": "",
+            "Delhi NCR": "delhi",
+            "Bangalore (Bengaluru)": "bangalore",
+            "Gurgaon (Gurugram)": "gurgaon",
+            "Noida": "noida",
+            "Faridabad": "faridabad",
+            "All Cities": "",
         }
         city_selected_label = st.selectbox(
-            "📍 Select City / Region",
+            "📍 Location",
             options=list(city_display_map.keys()),
-            index=0,  # Default to Faridabad
-            help="Choose your target city across Delhi NCR, Haryana, or Bangalore",
+            index=0,
+            help="Select metropolitan dining region",
         )
         resolved_city = city_display_map[city_selected_label]
 
-    with col_locality:
+    with col_loc:
         locality_input = st.text_input(
-            "📌 Locality / Sector (Optional)",
+            "📌 Locality / Area",
             value="",
-            placeholder="e.g. Sector 16, NIT, Indiranagar, Cyber Hub",
-            help="Filter to a specific sector, market, or neighborhood",
+            placeholder="e.g. Connaught Place, Indiranagar, Cyber Hub",
+            help="Filter to a neighborhood or sector",
         )
 
-    with col_craving:
+    with col_search:
         craving_query = st.text_input(
-            "🔍 Your Food Craving or Dish",
-            value="Spicy paneer tikka and dal makhani with family",
-            placeholder="e.g. Pure Veg Thali, Dal Makhani & Naan, Chole Bhature, artisan coffee",
-            help="Describe your food craving, dishes, or dining mood",
+            "🔍 Search for restaurant, cuisine or a dish",
+            value="Dal Makhani, crispy paneer tikka & artisan breads with family",
+            placeholder="e.g. Pure Veg Thali, Chole Bhature, artisan cold brew, woodfired pizza",
+            help="Natural language craving or vibe (e.g. 'romantic rooftop', 'quick breakfast')",
         )
 
-    # Row 2: Instant Filter Controls
+    # Row 2: Zomato Filter Bar (Pure Veg Pill, Rating, Budget)
     col_f1, col_f2, col_f3, col_f4 = st.columns([1.2, 1.8, 1.4, 1.1])
 
     with col_f1:
-        st.write("")  # Spacing
+        st.write("")
         is_pure_veg = st.checkbox(
             "🌱 Pure Veg Only",
             value=True,
-            help="Strictly filter for 100% pure vegetarian restaurants and dining",
+            help="Filter strictly for 100% pure vegetarian restaurants (matching zomato.com?veg=1)",
         )
 
     with col_f2:
         budget_selection = st.selectbox(
-            "💰 Budget for Two",
-            options=["Any Budget (All Tiers)", "Low (< ₹400)", "Mid (₹400 – ₹1,000)", "High (> ₹1,000)"],
+            "💰 Cost for Two",
+            options=["Any Budget", "Low (< ₹400)", "Mid (₹400 – ₹1,000)", "High (> ₹1,000)"],
             index=0,
         )
 
     with col_f3:
         min_rating = st.slider(
-            "⭐ Minimum Rating",
+            "⭐ Rating Threshold",
             min_value=0.0,
             max_value=5.0,
             value=3.5,
             step=0.1,
-            help="Filter restaurants with rating at or above this threshold",
+            help="Filter restaurants with rating at or above this score",
         )
 
     with col_f4:
@@ -911,76 +805,53 @@ with st.form("main_search_form"):
             index=1,
         )
 
-    # Row 3: Cuisine Filters & Quick Craving Presets
-    col_c1, col_c2 = st.columns([1.5, 1.5])
-    with col_c1:
-        selected_cuisines = st.multiselect(
-            "🍽️ Filter Cuisines (Optional)",
-            options=[
-                "North Indian",
-                "South Indian",
-                "Chinese",
-                "Street Food & Chaat",
-                "Sweets & Mithai",
-                "Italian & Pizzas",
-                "Fast Food & Burgers",
-                "Bakery & Desserts",
-                "Cafe & Beverages",
-                "Mughlai & Biryani",
-                "Continental",
-                "Pan-Asian & Thai",
-            ],
-            default=[],
-            help="Choose specific cuisines or leave empty to match across all cuisines",
-        )
-    with col_c2:
-        quick_craving_preset = st.selectbox(
-            "⚡ Quick Craving Shortcut (Optional)",
-            options=[
-                "Custom Craving (Use text above)",
-                "🥗 Pure Veg Thali & North Indian",
-                "🍲 Delhi Chole Bhature & Chaat",
-                "☕ Cozy Cafe, Coffee & Bakery",
-                "🍨 Heritage Mithai, Sweets & Kulfi",
-                "🍛 Creamy Dal Makhani & Garlic Naan",
-                "🥟 Crisp Street Chaat & Snacks",
-                "🍕 Woodfired Pizza & Pasta",
-                "🍔 Gourmet Burgers & Shakes",
-            ],
-            index=0,
-            help="Pick a popular curated craving to instantly enrich your search",
-        )
+    # Row 3: Cuisines Multiselect
+    selected_cuisines = st.multiselect(
+        "🍽️ Filter by Cuisines (Optional)",
+        options=[
+            "North Indian",
+            "South Indian",
+            "Chinese",
+            "Street Food & Chaat",
+            "Sweets & Mithai",
+            "Italian & Pizzas",
+            "Cafe & Beverages",
+            "Bakery & Desserts",
+            "Fast Food & Burgers",
+            "Mughlai & Biryani",
+            "Continental",
+            "Pan-Asian & Thai",
+        ],
+        default=[],
+        help="Filter specific cuisines",
+    )
 
-    # Prominent Submit Button (Stitch Elevated)
-    submitted = st.form_submit_button("✨ Find My Perfect Table", use_container_width=True)
-
-# Quick Cravings Suggestion Bar
-render_html(
-    """
-    <div class="quick-chips-wrapper">
-        <span class="quick-chip-label">Popular Cravings:</span>
-        <span class="quick-chip-item">🥗 Pure Veg Thali</span>
-        <span class="quick-chip-item">🍲 Delhi Chole Bhature</span>
-        <span class="quick-chip-item">☕ Cozy Cafe & Sourdough</span>
-        <span class="quick-chip-item">🍨 Heritage Mithai</span>
-        <span class="quick-chip-item">🍛 Dal Makhani & Naan</span>
-        <span class="quick-chip-item">🥟 Crisp Street Chaat</span>
-    </div>
-    """
-)
+    submitted = st.form_submit_button("✨ Search with AI Concierge", use_container_width=True)
 
 
-# ── EXECUTION & RECOMMENDATION RESULTS ────────────────────────────────────────
+# 4. Filter Pills Display (Exact visual mimicry of zomato.com/ncr/restaurants)
+veg_class = "z-pill z-pill-veg-active" if is_pure_veg else "z-pill"
+veg_pill_html = f"""
+<div class="zomato-filter-pills-row">
+    <span class="z-pill">⚙️ Filters</span>
+    <span class="{veg_class}"><span class="z-veg-dot"></span> Pure Veg</span>
+    <span class="z-pill">⭐ Rating: {min_rating:.1f}+</span>
+    <span class="z-pill">💰 {budget_selection}</span>
+    <span class="z-pill">📍 {city_selected_label.split(' (')[0]}</span>
+</div>
+"""
+render_html(veg_pill_html)
 
+
+# ── RESOLVE SEARCH PREFERENCES & PERSONALIZATION ─────────────────────────────
 budget_tier_map = {
-    "Any Budget (All Tiers)": BudgetTier.ANY,
+    "Any Budget": BudgetTier.ANY,
     "Low (< ₹400)": BudgetTier.LOW,
     "Mid (₹400 – ₹1,000)": BudgetTier.MEDIUM,
     "High (> ₹1,000)": BudgetTier.HIGH,
 }
 target_budget = budget_tier_map.get(budget_selection, BudgetTier.ANY)
 
-# Resolve effective target location for engine
 city_clean_name = city_selected_label.split(" (")[0]
 loc_clean = locality_input.strip()
 if loc_clean and resolved_city:
@@ -1008,38 +879,46 @@ cuisine_map = {
 }
 canonical_cuisines = [cuisine_map.get(c, c.lower()) for c in selected_cuisines]
 
+# Inject user taste profile context into LLM prompt notes if available
 effective_query = craving_query.strip()
-if quick_craving_preset != "Custom Craving (Use text above)":
-    preset_clean = quick_craving_preset.split(" ", 1)[-1]
-    effective_query = f"{effective_query} {preset_clean}".strip() if effective_query else preset_clean
+if taste_stats["has_profile"]:
+    effective_query = f"{effective_query} {taste_stats['prompt_hint']}".strip()
 
 if is_pure_veg and "veg" not in effective_query.lower():
     effective_query = f"pure vegetarian {effective_query}".strip()
 
-if submitted:
-    prefs = UserPreferences(
-        location=effective_location,
-        budget=target_budget,
-        cuisines=canonical_cuisines,
-        min_rating=min_rating,
-        additional_notes=effective_query,
-        pure_veg=is_pure_veg,
-        max_results=max_results,
-    )
 
-    with st.spinner(f"🔍 Curating the best dining matches in {city_clean_name}..."):
-        try:
-            response: RecommendationResponse = recommend(prefs, dataset)
-        except Exception as exc:
-            st.error(f"Recommendation engine error: {exc}")
-            response = None
+# ── RECOMMENDATION EXECUTION & INTERACTIVE CARD RENDERING ─────────────────────
+if submitted or ("last_response" in st.session_state and st.session_state["last_response"]):
+    if submitted:
+        prefs = UserPreferences(
+            location=effective_location,
+            budget=target_budget,
+            cuisines=canonical_cuisines,
+            min_rating=min_rating,
+            additional_notes=effective_query,
+            pure_veg=is_pure_veg,
+            max_results=max_results,
+        )
+
+        with st.spinner(f"🔍 Finding top dining spots in {city_clean_name}..."):
+            try:
+                response = recommend(prefs, dataset)
+                st.session_state["last_response"] = response
+                st.session_state["last_city_name"] = city_clean_name
+            except Exception as exc:
+                st.error(f"Recommendation engine error: {exc}")
+                response = None
+    else:
+        response = st.session_state["last_response"]
+        city_clean_name = st.session_state.get("last_city_name", city_clean_name)
 
     if response and response.recommendations:
         render_html(
             f"""
-            <div class="results-header-banner">
-                <h3>🍽️ Top Verified AI Matches in {city_clean_name}</h3>
-                <span style="color:#24963F; font-size:0.95rem; font-weight:700;">✓ {len(response.recommendations)} Verified Matches</span>
+            <div style="margin: 1.5rem 0 1rem 0; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-size:1.45rem; font-weight:800;">🍽️ Top Handpicked Restaurants in {city_clean_name}</h3>
+                <span style="color:#24963F; font-size:0.9rem; font-weight:700;">✓ {len(response.recommendations)} Verified Matches</span>
             </div>
             """
         )
@@ -1047,131 +926,200 @@ if submitted:
         if response.curator_summary:
             relaxation_html = ""
             if response.relaxation_applied:
-                relaxation_html = f'<div class="strategy-relaxation-pill">💡 <b>Helpful Note:</b> {response.relaxation_applied}</div>'
+                relaxation_html = f'<div style="margin-top:0.5rem; font-size:0.85rem; color:#DB313F; font-weight:600;">💡 {response.relaxation_applied}</div>'
 
             render_html(
                 f"""
-                <div class="ai-strategy-card">
-                    <div class="strategy-header">
-                        <div class="strategy-title">💡 AI Dining Curator Insights</div>
-                    </div>
-                    <p class="strategy-body">{response.curator_summary}</p>
+                <div style="background:#FFFDF9; border:1px solid #F5ECE0; border-left:4px solid #E23744; border-radius:10px; padding:0.9rem 1.2rem; margin-bottom:1.5rem;">
+                    <div style="font-size:0.8rem; font-weight:800; color:#E23744; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.25rem;">💡 AI Dining Curator Insights</div>
+                    <p style="margin:0; font-size:0.92rem; color:#2D2D2D; line-height:1.5;">{response.curator_summary}</p>
                     {relaxation_html}
                 </div>
                 """
             )
 
-        # Render Clean, Authentic Restaurant Cards (Image-Free, User-Friendly)
+        # Render Interactive Cards
         for rank, r in enumerate(response.recommendations, start=1):
+            r_name = r.restaurant_name
             cuisines_list = r.cuisine if isinstance(r.cuisine, list) else [str(r.cuisine)]
-            cuisines_html = "".join([f'<span class="cuisine-badge-item">{c.title()}</span>' for c in cuisines_list[:5]])
-
-            is_veg_card = bool(getattr(r, "is_pure_veg", False))
-            veg_html = '<span class="veg-indicator">🌱 Pure Veg</span>' if is_veg_card else ''
+            cuisines_str = ", ".join([c.title() for c in cuisines_list[:4]])
             loc_str = r.locality.title() if r.locality else city_clean_name
             addr_str = r.address if r.address else f"{loc_str}, {city_clean_name}"
+            card_img = get_restaurant_card_image(cuisines_list, r_name)
 
-            # Flat HTML with zero leading indentation to guarantee no markdown code block triggers
-            card_html = (
-                f'<div class="zomato-restaurant-card">'
-                f'<div class="card-top-header">'
-                f'<div class="card-title-cluster">'
-                f'<span class="match-rank-badge">#{rank} Top Match</span>'
-                f'<h4 class="restaurant-title">{r.restaurant_name}</h4>'
-                f'</div>'
-                f'<div class="rating-badge-pill">'
-                f'<span>★ {r.rating:.1f}</span>'
-                f'<span class="rating-sub">/ 5.0</span>'
-                f'</div>'
-                f'</div>'
-                f'<div class="locality-subrow">'
-                f'<span>📍 {loc_str}, {city_clean_name}</span>'
-                f'<span class="meta-dot">•</span>'
-                f'<span class="cost-highlight">💰 {r.estimated_cost}</span>'
-                f'</div>'
-                f'<div class="cuisines-row">{veg_html}{cuisines_html}</div>'
-                f'<div class="ai-insight-box">'
-                f'<div class="ai-insight-title">✨ Why You\'ll Love This Place</div>'
-                f'<div class="ai-insight-text">{r.ai_explanation}</div>'
-                f'</div>'
-                f'<div class="card-footer-action-row">'
-                f'<span class="card-address-text">📌 {addr_str}</span>'
-                f'<div class="card-action-btn-group">'
-                f'<span class="card-btn-outline">Directions & Map</span>'
-                f'</div>'
-                f'</div>'
-                f'</div>'
-            )
-            render_html(card_html)
+            # Check if this restaurant is currently saved
+            is_saved = is_restaurant_saved(r_name)
+            save_label = "❤️ Saved" if is_saved else "🤍 Save"
+
+            # Google maps query URL
+            query_encoded = urllib.parse.quote(f"{r_name} {loc_str} {city_clean_name}")
+            maps_url = f"https://www.google.com/maps/search/?api=1&query={query_encoded}"
+
+            # Visual Restaurant Card Layout
+            card_visual_html = f"""
+            <div class="zomato-card-container">
+                <div class="z-card-image-wrap">
+                    <img src="{card_img}" class="z-card-img" alt="{r_name}" />
+                    <span class="z-badge-rank">#{rank} Top Match</span>
+                    <span class="z-badge-offer">FLAT 20% OFF</span>
+                </div>
+                <div class="z-card-content">
+                    <div class="z-card-row-1">
+                        <h4 class="z-restaurant-name">{r_name}</h4>
+                        <span class="z-rating-pill">★ {r.rating:.1f}</span>
+                    </div>
+                    <div class="z-card-row-2">
+                        <span class="z-cuisines-text">{cuisines_str}</span>
+                        <span class="z-cost-text">{r.estimated_cost}</span>
+                    </div>
+                    <div class="z-card-row-3">📍 {loc_str}, {city_clean_name} • 32 mins</div>
+                    <div class="z-ai-justification">
+                        <div class="z-ai-title">✨ Why You'll Love This Place</div>
+                        <div class="z-ai-text">{r.ai_explanation}</div>
+                    </div>
+                </div>
+            </div>
+            """
+            render_html(card_visual_html)
+
+            # Interactive Action Bar for this restaurant
+            btn_col1, btn_col2, btn_col3 = st.columns([1.2, 2.2, 1.4])
+
+            with btn_col1:
+                if st.button(save_label, key=f"save_btn_{r_name}_{rank}", use_container_width=True):
+                    now_saved = toggle_saved_restaurant({
+                        "restaurant_name": r_name,
+                        "rating": r.rating,
+                        "locality": loc_str,
+                        "estimated_cost": r.estimated_cost,
+                        "cuisine": cuisines_list,
+                        "address": addr_str,
+                    })
+                    if now_saved:
+                        st.toast(f"❤️ Saved {r_name} to your Favorites!")
+                    else:
+                        st.toast(f"Removed {r_name} from Favorites.")
+                    st.rerun()
+
+            with btn_col2:
+                # View Menu & Interactive Quick Order Expander
+                menu_expander = st.expander(f"🍽️ View Menu & Order from {r_name}")
+                with menu_expander:
+                    dishes = get_signature_dishes(cuisines_list)
+                    st.markdown("**Popular Signature Dishes:**")
+                    for d in dishes:
+                        d_col_info, d_col_order = st.columns([3, 1.2])
+                        with d_col_info:
+                            badge_txt = f"[{d['badge']}] " if "badge" in d else ""
+                            st.write(f"🌱 **{d['item']}** — ₹{d['price']}  \n*{badge_txt}Freshly prepared*")
+                        with d_col_order:
+                            if st.button(f"+ Order", key=f"ord_{r_name}_{d['item']}_{rank}"):
+                                add_order(
+                                    restaurant_name=r_name,
+                                    item_name=d["item"],
+                                    price=d["price"],
+                                    cuisine=cuisines_list[0] if cuisines_list else "North Indian",
+                                    locality=loc_str,
+                                )
+                                st.toast(f"✅ Ordered {d['item']}! Added to your AI Taste Profile.")
+                                st.rerun()
+                        st.markdown("<hr style='margin:0.4rem 0; border:none; border-top:1px dashed #EAEAEA;'>", unsafe_allow_html=True)
+
+            with btn_col3:
+                st.markdown(
+                    f"""
+                    <a href="{maps_url}" target="_blank" style="text-decoration:none;">
+                        <div style="background:#F8F9FA; border:1px solid #D9D9D9; border-radius:8px; padding:0.45rem 0.75rem; text-align:center; font-size:0.85rem; font-weight:700; color:#1C1C1C;">
+                            📍 Directions ↗
+                        </div>
+                    </a>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='height: 1.2rem;'></div>", unsafe_allow_html=True)
 
     else:
-        st.warning(f"No restaurants matched your exact criteria in {city_clean_name}. Try broadening your rating threshold or area.")
+        st.warning(f"No restaurants matched your exact criteria in {city_clean_name}. Try broadening your rating threshold or budget tier.")
 
 
-# ── CURATED DINING COLLECTIONS SHOWCASE (Stitch Elevated) ─────────────────────
-render_html('<div class="collection-section-header">🌟 Curated Dining Collections</div>')
+# ── COLLECTIONS CAROUSEL SECTION (Zomato Signature) ──────────────────────────
+render_html(
+    """
+    <div class="collections-title-cluster">
+        <h2 class="collections-title">Collections</h2>
+        <div class="collections-subtitle">Explore curated lists of top restaurants, cafes, pubs, and bars in your city, based on trends</div>
+    </div>
+    """
+)
 
 thali_b64 = load_base64_image("thali_thumb.jpg")
 chaat_b64 = load_base64_image("chaat_thumb.jpg")
 cafe_b64 = load_base64_image("cafe_thumb.jpg")
 sweets_b64 = load_base64_image("sweets_thumb.jpg")
 
-col1, col2 = st.columns(2)
-with col1:
+col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+
+with col_c1:
     render_html(
         f"""
-        <div class="collection-card">
-            <img src="{thali_b64}" class="collection-img" alt="Pure Veg Thalis" />
-            <div class="collection-body">
-                <span class="collection-tag">AUTHENTIC FEASTS</span>
-                <h4>🥗 Pure Veg Delights & Royal Thalis</h4>
-                <p>Rich Dal Makhani, Paneer Butter Masala, Tandoori Rotis, and unlimited traditional Rajasthani and North Indian thalis for family dining.</p>
+        <div class="z-collection-card">
+            <img src="{thali_b64}" class="z-collection-bg-img" alt="Pure Veg Delights" />
+            <div class="z-collection-overlay">
+                <div class="z-collection-name">Pure Veg Thalis & Feasts</div>
+                <div class="z-collection-places">18 Places &gt;</div>
             </div>
         </div>
         """
     )
+    if st.button("Explore Pure Veg ↗", key="col_btn_veg", use_container_width=True):
+        st.session_state["last_response"] = None
+        st.rerun()
 
-with col2:
+with col_c2:
     render_html(
         f"""
-        <div class="collection-card">
-            <img src="{chaat_b64}" class="collection-img" alt="Delhi NCR Street Food" />
-            <div class="collection-body">
-                <span class="collection-tag">ICONIC STREET BITES</span>
-                <h4>🍲 Famous Street Food & Crisp Chaat</h4>
-                <p>Puffed golden Chole Bhature, spicy Gol Gappe, buttery Pav Bhaji, Aloo Tikki, and crispy evening snack joints.</p>
+        <div class="z-collection-card">
+            <img src="{chaat_b64}" class="z-collection-bg-img" alt="Street Food" />
+            <div class="z-collection-overlay">
+                <div class="z-collection-name">Iconic Street Bites</div>
+                <div class="z-collection-places">24 Places &gt;</div>
             </div>
         </div>
         """
     )
+    if st.button("Explore Street Chaat ↗", key="col_btn_chaat", use_container_width=True):
+        st.session_state["last_response"] = None
+        st.rerun()
 
-st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-col3, col4 = st.columns(2)
-with col3:
+with col_c3:
     render_html(
         f"""
-        <div class="collection-card">
-            <img src="{cafe_b64}" class="collection-img" alt="Aesthetic Cafes" />
-            <div class="collection-body">
-                <span class="collection-tag">ARTISAN BREWS</span>
-                <h4>☕ Cozy Cafes & Artisan Bakeries</h4>
-                <p>Freshly brewed espresso, artisan croissants, avocado toasts, and relaxed work-friendly cafes with peaceful ambiance.</p>
+        <div class="z-collection-card">
+            <img src="{cafe_b64}" class="z-collection-bg-img" alt="Cozy Cafes" />
+            <div class="z-collection-overlay">
+                <div class="z-collection-name">Cozy Cafes & Bakeries</div>
+                <div class="z-collection-places">15 Places &gt;</div>
             </div>
         </div>
         """
     )
+    if st.button("Explore Cafes ↗", key="col_btn_cafe", use_container_width=True):
+        st.session_state["last_response"] = None
+        st.rerun()
 
-with col4:
+with col_c4:
     render_html(
         f"""
-        <div class="collection-card">
-            <img src="{sweets_b64}" class="collection-img" alt="Heritage Sweet Shops" />
-            <div class="collection-body">
-                <span class="collection-tag">HERITAGE MITHAI</span>
-                <h4>🍨 Festive Sweets & Heritage Confectionery</h4>
-                <p>Iconic mithai makers like Om Sweets, Bikaner, Haldiram's, and heritage family lunch spots for festive celebrations.</p>
+        <div class="z-collection-card">
+            <img src="{sweets_b64}" class="z-collection-bg-img" alt="Heritage Sweets" />
+            <div class="z-collection-overlay">
+                <div class="z-collection-name">Heritage Mithai & Sweets</div>
+                <div class="z-collection-places">12 Places &gt;</div>
             </div>
         </div>
         """
     )
+    if st.button("Explore Mithai ↗", key="col_btn_sweets", use_container_width=True):
+        st.session_state["last_response"] = None
+        st.rerun()
